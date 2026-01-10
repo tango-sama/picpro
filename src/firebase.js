@@ -1,6 +1,6 @@
 // Firebase configuration
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
@@ -38,4 +38,4 @@ if (typeof window !== 'undefined') {
     }
 }
 
-export { app, auth, provider, storage, db, analytics };
+export { app, auth, provider, storage, db, analytics, signInWithCredential, GoogleAuthProvider };

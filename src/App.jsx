@@ -1,57 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Features from './components/Features';
-import MyCreation from './components/MyCreation';
 import Footer from './components/Footer';
-import LoginModal from './components/LoginModal';
 import Dashboard from './components/Dashboard';
 import BackgroundChanger from './components/BackgroundChanger';
-
-import { app, analytics } from './firebase';
+import MyCreationsPage from './components/MyCreationsPage';
+import AboutPage from './components/AboutPage';
+import FeatureBackgroundChanger from './components/FeatureBackgroundChanger';
+import FeatureImageToVideo from './components/FeatureImageToVideo';
+import FeatureTextToVoice from './components/FeatureTextToVoice';
 
 function AppContent() {
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const openLoginModal = () => setIsLoginModalOpen(true);
-  const closeLoginModal = () => setIsLoginModalOpen(false);
-
-  // Check session on mount and after login modal closes
   useEffect(() => {
-    console.log("🔥 Firebase App initialized:", app.name);
-    console.log("CAUTION: If you see this, Firebase is connected!", analytics);
-
     fetch('/auth/me', { credentials: 'include' })
       .then(res => {
         if (res.ok) return res.json();
-        throw new Error('Not logged in');
+        throw new Error('Unauthorized');
       })
-      .then(() => setLoggedIn(true))
-      .catch(() => setLoggedIn(false));
-  }, [isLoginModalOpen]);
+      .then(data => setUser(data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-dark)' }}>
+      <div className="animate-spin" style={{ width: '40px', height: '40px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
+    </div>;
+  }
 
   return (
-    <div className="App">
-      <Header onLoginClick={openLoginModal} />
+    <div className="App animate-fadeIn">
+      <Header user={user} />
       <main>
         <Routes>
+          {/* Landing / Dashboard */}
           <Route path="/" element={
-            loggedIn ? (
-              <Dashboard />
-            ) : (
+            user ? <Dashboard /> : (
               <>
-                <Hero onLoginClick={openLoginModal} />
-                <Features />
-                <MyCreation />
+                <Hero />
+                <Features user={user} />
+                <div style={{ padding: '4rem 0', textAlign: 'center' }}>
+                  <div className="container glass" style={{ padding: '6rem 2rem', borderRadius: '3rem' }}>
+                    <h2 style={{ fontSize: '3rem', marginBottom: '1rem' }}>Accelerate your growth.</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem' }}>
+                      Join thousands of sellers who have scaled their product engagement by 300% using PicPro.
+                    </p>
+                    <button className="btn btn-primary" onClick={() => window.location.href = '/auth/google'} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
+                      Start Designing for Free
+                    </button>
+                  </div>
+                </div>
               </>
             )
           } />
-          <Route path="/tool/background-changer" element={<BackgroundChanger />} />
+
+          {/* Protected Tool Routes */}
+          <Route path="/tool/background-changer" element={user ? <BackgroundChanger /> : <Navigate to="/feature/background-changer" />} />
+          <Route path="/my-creations" element={user ? <MyCreationsPage /> : <Navigate to="/" />} />
+
+          {/* Public Pages */}
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/feature/background-changer" element={<FeatureBackgroundChanger />} />
+          <Route path="/feature/image-to-video" element={<FeatureImageToVideo />} />
+          <Route path="/feature/text-to-voice" element={<FeatureTextToVoice />} />
+
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
-      <LoginModal isOpen={isLoginModalOpen} onClose={closeLoginModal} />
       <Footer />
     </div>
   );

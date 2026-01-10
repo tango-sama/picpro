@@ -1,25 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Upload, Loader2, Sparkles, Eraser, Brush, Download } from 'lucide-react';
+import { ArrowLeft, Upload, Loader2, Sparkles, Brush, Download, Trash2, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { storage, db, auth } from '../firebase';
+import { storage, db } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, setDoc, increment } from 'firebase/firestore';
 
-// Debug logging helper
-const debugLog = (location, message, data, hypothesisId = null) => {
-    fetch('http://127.0.0.1:7242/ingest/ba7c5992-520a-4290-a7f1-ab8b4e907062', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            location,
-            message,
-            data,
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            hypothesisId
-        })
-    }).catch(() => {});
-};
+const COST_PER_GENERATION = 15;
+const INITIAL_CREDITS = 200;
 
 const BackgroundChanger = () => {
     const navigate = useNavigate();
@@ -28,13 +15,46 @@ const BackgroundChanger = () => {
     const [loading, setLoading] = useState(false);
     const [statusText, setStatusText] = useState('');
     const [runId, setRunId] = useState(null);
+    const [currentUser, setCurrentUser] = useState(null);
+    const [credits, setCredits] = useState(0);
 
+    // Fetch user from custom session on mount
+    useEffect(() => {
+        fetch('/auth/me', { credentials: 'include' })
+            .then(res => res.ok ? res.json() : null)
+            .then(async (data) => {
+                if (data?.idToken) {
+                    // Parse JWT to get user info
+                    try {
+                        const base64Url = data.idToken.split('.')[1];
+                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                        const payload = JSON.parse(window.atob(base64));
+                        const userId = payload.sub;
+                        setCurrentUser({ uid: userId, ...payload });
+
+                        // Fetch or initialize credits
+                        const userDocRef = doc(db, 'users', userId);
+                        const userDoc = await getDoc(userDocRef);
+                        if (userDoc.exists()) {
+                            setCredits(userDoc.data().credits ?? INITIAL_CREDITS);
+                        } else {
+                            // First time user - create with initial credits
+                            await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
+                            setCredits(INITIAL_CREDITS);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse token or fetch credits', e);
+                    }
+                }
+            })
+            .catch(() => setCurrentUser(null));
+    }, []);
     // Canvas & Mask state
     const [imageLoaded, setImageLoaded] = useState(false);
     const canvasRef = useRef(null);
     const imageRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [brushSize, setBrushSize] = useState(20);
+    const [brushSize, setBrushSize] = useState(28); // 50% of range
     const [outputImage, setOutputImage] = useState(null);
     const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
     const [isHoveringCanvas, setIsHoveringCanvas] = useState(false);
@@ -62,6 +82,22 @@ const BackgroundChanger = () => {
                 img.src = event.target.result;
             };
             reader.readAsDataURL(selectedFile);
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setFile(null);
+        setImageLoaded(false);
+        setOutputImage(null);
+        setRunId(null);
+        // Clear canvases
+        if (canvasRef.current && maskCanvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+            const maskCtx = maskCanvasRef.current.getContext('2d');
+            maskCtx.fillStyle = 'black';
+            maskCtx.fillRect(0, 0, maskCanvasRef.current.width, maskCanvasRef.current.height);
         }
     };
 
@@ -113,7 +149,7 @@ const BackgroundChanger = () => {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         setCursorPos({ x, y });
-        
+
         // Continue drawing if already drawing
         if (isDrawing) {
             draw(e);
@@ -166,471 +202,173 @@ const BackgroundChanger = () => {
         });
     };
 
-    // Helper function to convert file/blob to base64 data URL
-    const fileToDataURL = (file) => {
-        // #region agent log
-        debugLog('BackgroundChanger.jsx:154', 'fileToDataURL entry', {
-            fileType: file?.type,
-            fileSize: file?.size,
-            fileName: file?.name
-        }, 'A');
-        // #endregion
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const result = reader.result;
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:161', 'fileToDataURL success', {
-                    resultLength: result?.length,
-                    resultPrefix: result?.substring(0, 50),
-                    isDataUrl: result?.startsWith('data:')
-                }, 'A');
-                // #endregion
-                resolve(result);
-            };
-            reader.onerror = (error) => {
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:170', 'fileToDataURL error', {
-                    error: error?.message || String(error)
-                }, 'A');
-                // #endregion
-                reject(error);
-            };
-            reader.readAsDataURL(file);
-        });
-    };
-
     const pollForResults = async (runId, creationId, userId) => {
         setStatusText('Waiting for magic (this may take 20-30s)...');
+        let creditsDeducted = false;
+        let isCompleted = false;
 
         const checkStatus = async () => {
+            if (isCompleted) return true; // Already done, don't process again
+
             try {
-                // Use same API key as initial call
-                const apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidXNlcl8zNk00Nkk5U1FtUXVBWUJnN01qRGZKTmJtanAiLCJpYXQiOjE3Njc3NDYzODAsIm9yZ19pZCI6Im9yZ18zNk00ODJNdWUzODlUMGZJWm8xSUFaT1lnNTcifQ.iuqsjag2zGGXirK_1nCzlBJgSZbiZbyb_0qFzI02kmE" || import.meta.env.VITE_COMFY_DEPLOY_API_KEY;
-                
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:166', 'Polling status check', {
-                    runId,
-                    hasApiKey: !!apiKey,
-                    apiKeyLength: apiKey?.length
-                }, 'B');
-                // #endregion
-                
-                if (!apiKey) {
-                    throw new Error('ComfyDeploy API key is missing');
-                }
-
-                const res = await fetch(
-                    `https://api.comfydeploy.com/api/run/${runId}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`
-                        }
-                    }
-                );
-
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:174', 'Poll response status', {
-                    status: res.status,
-                    statusText: res.statusText,
-                    ok: res.ok
-                }, 'D');
-                // #endregion
-
-                if (!res.ok) {
-                    if (res.status === 404) {
-                        // Run not found yet, keep polling
-                        return false;
-                    }
-                    throw new Error(`Status check failed: ${res.statusText}`);
-                }
+                const res = await fetch(`/api/run/${runId}`);
+                if (!res.ok) return false;
 
                 const data = await res.json();
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:191', 'Poll response data', {
-                    status: data.status,
-                    hasOutputs: !!data.outputs,
-                    outputsLength: data.outputs?.length,
-                    hasError: !!data.error,
-                    responseKeys: Object.keys(data)
-                }, 'D');
-                // #endregion
-                console.log('Poll response:', data);
+                console.log('Poll:', data);
 
-                // Check if generation is complete
-                if (data.status === 'completed' || data.status === 'success') {
-                    // Look for output images in various possible formats
+                if (data.outputs && data.outputs.length > 0) {
                     let outputUrl = null;
 
-                    if (data.outputs && Array.isArray(data.outputs)) {
-                        for (const output of data.outputs) {
-                            // Check for images array
-                            if (output.data?.images && Array.isArray(output.data.images) && output.data.images.length > 0) {
-                                outputUrl = output.data.images[0].url || output.data.images[0];
-                                break;
-                            }
-                            // Check for output_images array
-                            if (output.data?.output_images && Array.isArray(output.data.output_images) && output.data.output_images.length > 0) {
-                                outputUrl = output.data.output_images[0].url || output.data.output_images[0];
-                                break;
-                            }
-                            // Check for direct image URL
-                            if (output.data?.image_url) {
-                                outputUrl = output.data.image_url;
-                                break;
-                            }
+                    for (const output of data.outputs) {
+                        // Prioritize "output_images" as requested
+                        if (output.data && output.data.output_images && output.data.output_images.length > 0) {
+                            outputUrl = output.data.output_images[0].url;
+                            break;
                         }
-                    }
-
-                    // Also check top-level image fields
-                    if (!outputUrl && data.image_url) {
-                        outputUrl = data.image_url;
-                    }
-                    if (!outputUrl && data.output_image) {
-                        outputUrl = data.output_image;
+                        if (output.data && output.data.images && output.data.images.length > 0) {
+                            outputUrl = output.data.images[0].url;
+                            break;
+                        }
                     }
 
                     if (outputUrl) {
-                        console.log('📥 Downloading output image from ComfyDeploy...');
-                        setStatusText('Saving result to Firebase...');
-                        
+                        isCompleted = true; // Mark as completed to prevent re-processing
+
                         try {
-                            // Download the image from ComfyDeploy
-                            const imageResponse = await fetch(outputUrl);
-                            if (!imageResponse.ok) {
-                                throw new Error('Failed to download output image');
-                            }
-                            const imageBlob = await imageResponse.blob();
-                            
-                            // Upload to Firebase Storage
-                            console.log('📤 Uploading output to Firebase Storage...');
-                            const outputRef = ref(storage, `users/${userId}/outputs/${Date.now()}_result.png`);
+                            // Download and save to personal storage
+                            const imageRes = await fetch(outputUrl);
+                            const imageBlob = await imageRes.blob();
+                            const storagePath = `users/${userId}/outputs/${runId}.png`;
+                            const outputRef = ref(storage, storagePath);
                             await uploadBytes(outputRef, imageBlob);
-                            const firebaseOutputUrl = await getDownloadURL(outputRef);
-                            console.log('✅ Output saved to Firebase:', firebaseOutputUrl);
-                            
-                            // Update Firestore record with Firebase URL
+                            const downloadUrl = await getDownloadURL(outputRef);
+
+                            setOutputImage(downloadUrl);
+                            setLoading(false);
+                            setStatusText('Done!');
+
                             if (creationId && userId) {
                                 await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
-                                    outputUrl: firebaseOutputUrl,
-                                    comfyDeployUrl: outputUrl, // Keep original for reference
+                                    outputUrl: downloadUrl,
                                     status: 'completed',
                                     completedAt: serverTimestamp()
                                 });
-                                console.log('✅ Firestore record updated');
-                            }
-                            
-                            // Show from Firebase
-                            setOutputImage(firebaseOutputUrl);
-                            setLoading(false);
-                            setStatusText('Done!');
-                            return true;
-                        } catch (uploadError) {
-                            console.error('❌ Error uploading to Firebase:', uploadError);
-                            // Fallback: show ComfyDeploy URL if Firebase upload fails
-                            setOutputImage(outputUrl);
-                            setLoading(false);
-                            setStatusText('Done! (using ComfyDeploy URL)');
-                            // Still try to update Firestore with ComfyDeploy URL
-                            if (creationId && userId) {
-                                try {
-                                    await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
-                                        outputUrl: outputUrl,
-                                        status: 'completed',
-                                        completedAt: serverTimestamp(),
-                                        firebaseUploadFailed: true
-                                    });
-                                } catch (e) {
-                                    console.error('Failed to update Firestore:', e);
+                                // Credits are derived from server-side check now, no client deduction needed here.
+                                // We can fetch the latest user, but the credit balance in UI might lag slightly until refresh or listener.
+                                // For better UX, we can decrement local state immediately if we trust the server succeeded (it did if we are here).
+                                // Actually, we already decremented local state in handleGenerate assuming success? No, let's sync it.
+                                const userDoc = await getDoc(doc(db, 'users', userId));
+                                if (userDoc.exists()) {
+                                    setCredits(userDoc.data().credits);
                                 }
                             }
-                            return true;
+                        } catch (err) {
+                            console.error("Storage error:", err);
+                            setOutputImage(outputUrl);
+                            setLoading(false);
+                            setStatusText('Done (Remote)!');
                         }
-                    } else {
-                        console.warn('No output image found in response:', data);
+                        return true;
                     }
-                } else if (data.status === 'failed' || data.status === 'error') {
-                    // Update Firestore on failure
-                    if (creationId && userId) {
-                        try {
-                            await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
-                                status: 'failed',
-                                error: data.error || 'Generation failed',
-                                completedAt: serverTimestamp()
-                            });
-                        } catch (e) {
-                            console.error('Failed to update Firestore on error:', e);
-                        }
-                    }
-                    throw new Error(data.error || 'Generation failed on ComfyDeploy');
+                } else if (data.status === 'failed') {
+                    throw new Error('Generation failed.');
                 }
-                // If status is 'pending' or 'processing', continue polling
             } catch (err) {
-                console.warn("Polling error:", err);
-                // Don't throw on network errors, just continue polling
-                if (err.message && !err.message.includes('404')) {
-                    // Only show error for non-404 errors after a few attempts
-                    setStatusText(`Error checking status: ${err.message}`);
-                }
+                console.warn("Polling status check failed", err);
             }
             return false;
         };
 
-        // Poll every 3 seconds, with a maximum timeout of 5 minutes
-        let attempts = 0;
-        const maxAttempts = 100; // 100 attempts * 3 seconds = 5 minutes max
         const interval = setInterval(async () => {
-            attempts++;
             const done = await checkStatus();
-            if (done || attempts >= maxAttempts) {
-                clearInterval(interval);
-                if (attempts >= maxAttempts && !done) {
-                    setLoading(false);
-                    setStatusText('Timeout: Generation took too long');
-                    alert('The generation is taking longer than expected. Please try again.');
-                }
-            }
+            if (done) clearInterval(interval);
         }, 3000);
     };
 
+    // Helper to convert file/blob to base64 data URL
+    const toBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
     const handleGenerate = async () => {
-        // #region agent log
-        debugLog('BackgroundChanger.jsx:330', 'handleGenerate entry', {
-            hasFile: !!file,
-            hasPrompt: !!prompt,
-            promptLength: prompt?.length,
-            fileName: file?.name,
-            fileSize: file?.size
-        }, 'ALL');
-        // #endregion
-        console.log('🚀 handleGenerate called', { file: !!file, prompt });
-        
-        if (!file || !prompt) {
-            console.warn('❌ Missing file or prompt', { file: !!file, prompt: !!prompt });
-            alert('Please upload an image and enter a background description');
-            return;
-        }
-        
+        if (!file || !prompt) return;
         setLoading(true);
-        setStatusText('Preparing files...');
-        console.log('📤 Starting file preparation...');
+        setStatusText('Preparing images...');
 
         try {
-            const user = auth.currentUser;
-            const userId = user ? user.uid : 'anonymous';
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:346', 'User context', {
-                userId,
-                hasUser: !!user
-            }, 'ALL');
-            // #endregion
-            console.log('👤 User:', userId);
+            if (!currentUser) {
+                alert('Please log in to use this feature.');
+                setLoading(false);
+                return;
+            }
 
-            // 1. Convert original image to base64 data URL
-            console.log('📤 Converting image to base64...');
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:348', 'Before image conversion', {
-                fileType: file.type,
-                fileSize: file.size
-            }, 'A');
-            // #endregion
-            const inputImageDataUrl = await fileToDataURL(file);
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:351', 'After image conversion', {
-                dataUrlLength: inputImageDataUrl?.length,
-                dataUrlPrefix: inputImageDataUrl?.substring(0, 100)
-            }, 'A');
-            // #endregion
-            console.log('✅ Image converted to data URL');
+            // Server-side check handles deduction. We just optimistically check locally to save a request.
+            if (credits < COST_PER_GENERATION) {
+                alert(`Insufficient credits. You need ${COST_PER_GENERATION} coins but have ${credits}.`);
+                setLoading(false);
+                return;
+            }
 
-            // 2. Convert mask to base64 data URL
-            console.log('📤 Converting mask to base64...');
+            const userId = currentUser.uid;
+
+            // 1. Upload original image to TEMP folder (will be auto-cleaned)
+            setStatusText('Uploading image...');
+            const tempInputRef = ref(storage, `temp/${Date.now()}_${file.name}`);
+            await uploadBytes(tempInputRef, file);
+            const inputUrl = await getDownloadURL(tempInputRef);
+
+            // 2. Upload mask to TEMP folder
             const maskBlob = await getMaskBlob();
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:356', 'Before mask conversion', {
-                maskBlobSize: maskBlob?.size,
-                maskBlobType: maskBlob?.type
-            }, 'A');
-            // #endregion
-            const maskDataUrl = await fileToDataURL(maskBlob);
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:357', 'After mask conversion', {
-                dataUrlLength: maskDataUrl?.length,
-                dataUrlPrefix: maskDataUrl?.substring(0, 100)
-            }, 'A');
-            // #endregion
-            console.log('✅ Mask converted to data URL');
+            const tempMaskRef = ref(storage, `temp/${Date.now()}_mask.png`);
+            await uploadBytes(tempMaskRef, maskBlob);
+            const maskUrl = await getDownloadURL(tempMaskRef);
 
-            setStatusText('Sending to ComfyDeploy...');
+            setStatusText('Triggering AI...');
 
-            // 3. Call ComfyDeploy API directly with base64 data
-            const deploymentId = import.meta.env.VITE_COMFY_DEPLOY_DEPLOYMENT_ID || "a83a6835-79ee-44b0-ad65-cbad9b6ada88";
-            // Use the provided API key or fallback to env variable
-            const apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidXNlcl8zNk00Nkk5U1FtUXVBWUJnN01qRGZKTmJtanAiLCJpYXQiOjE3Njc3NDYzODAsIm9yZ19pZCI6Im9yZ18zNk00ODJNdWUzODlUMGZJWm8xSUFaT1lnNTcifQ.iuqsjag2zGGXirK_1nCzlBJgSZbiZbyb_0qFzI02kmE" || import.meta.env.VITE_COMFY_DEPLOY_API_KEY;
-
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:362', 'API configuration', {
-                hasApiKey: !!apiKey,
-                apiKeyLength: apiKey?.length,
-                apiKeyPrefix: apiKey?.substring(0, 20),
-                deploymentId,
-                envDeploymentId: import.meta.env.VITE_COMFY_DEPLOY_DEPLOYMENT_ID,
-                envApiKey: !!import.meta.env.VITE_COMFY_DEPLOY_API_KEY
-            }, 'B');
-            // #endregion
-            console.log('🔑 API Config:', { 
-                hasApiKey: !!apiKey, 
-                deploymentId,
-                apiKeyLength: apiKey?.length 
-            });
-
-            if (!apiKey) {
-                throw new Error('ComfyDeploy API key is missing.');
-            }
-
-            const requestBody = {
-                inputs: {
-                    "input_image": inputImageDataUrl,
-                    "input_text": prompt,
-                    "mask": maskDataUrl
-                }
-            };
-
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:376', 'Request body before API call', {
-                hasInputImage: !!requestBody.inputs.input_image,
-                inputImageLength: requestBody.inputs.input_image?.length,
-                inputText: requestBody.inputs.input_text,
-                hasMask: !!requestBody.inputs.mask,
-                maskLength: requestBody.inputs.mask?.length,
-                url: `https://api.comfydeploy.com/api/run/deployment/${deploymentId}`
-            }, 'C');
-            // #endregion
-            console.log('🌐 Calling ComfyDeploy API...', {
-                url: `https://api.comfydeploy.com/api/run/deployment/${deploymentId}`,
-                body: requestBody
-            });
-
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:389', 'Before fetch call', {
-                url: `https://api.comfydeploy.com/api/run/deployment/${deploymentId}`,
+            // 3. Call backend proxy with Firebase URLs
+            const res = await fetch('/api/generate', {
                 method: 'POST',
-                hasAuthHeader: true
-            }, 'C');
-            // #endregion
-            const res = await fetch(
-                `https://api.comfydeploy.com/api/run/deployment/${deploymentId}`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                }
-            );
-
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:401', 'After fetch call', {
-                status: res.status,
-                statusText: res.statusText,
-                ok: res.ok,
-                headers: Object.fromEntries(res.headers.entries())
-            }, 'C');
-            // #endregion
-            console.log('📥 API Response status:', res.status, res.statusText);
-
-            if (!res.ok) {
-                const errorText = await res.text();
-                // #region agent log
-                debugLog('BackgroundChanger.jsx:404', 'API error response', {
-                    status: res.status,
-                    statusText: res.statusText,
-                    errorText: errorText?.substring(0, 500)
-                }, 'C');
-                // #endregion
-                console.error('❌ API Error Response:', errorText);
-                let errorData;
-                try {
-                    errorData = JSON.parse(errorText);
-                } catch {
-                    errorData = { error: `HTTP ${res.status}: ${res.statusText}` };
-                }
-                throw new Error(errorData.error || errorData.message || `API request failed: ${res.statusText}`);
-            }
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deployment_id: "0229e028-c785-4e35-8317-cbde43ccfa01",
+                    inputs: {
+                        "input_image": inputUrl,
+                        "input_text": prompt,
+                        "mask": maskUrl
+                    }
+                })
+            });
 
             const data = await res.json();
-            // #region agent log
-            debugLog('BackgroundChanger.jsx:415', 'API success response', {
-                hasRunId: !!data.run_id,
-                runId: data.run_id,
-                hasError: !!data.error,
-                error: data.error,
-                status: data.status,
-                responseKeys: Object.keys(data)
-            }, 'D');
-            // #endregion
-            console.log('✅ API Response data:', data);
-            
-            if (data.error) {
-                console.error('❌ API returned error:', data.error);
-                throw new Error(data.error);
-            }
+            if (data.error) throw new Error(data.error);
 
-            if (!data.run_id) {
-                console.error('❌ No run_id in response:', data);
-                throw new Error('No run_id received from ComfyDeploy API');
-            }
-
-            console.log('✅ Run ID received:', data.run_id);
             setRunId(data.run_id);
 
-            // 4. Save to Firestore and get document ID
-            // Also upload to Firebase for backup/history (optional, in background)
-            console.log('💾 Saving to Firestore...');
-            let inputUrl = 'sent-directly';
-            let maskUrl = 'sent-directly';
-            
-            // Upload to Firebase for backup (optional, non-blocking)
-            try {
-                const inputRef = ref(storage, `users/${userId}/inputs/${Date.now()}_original_${file.name}`);
-                await uploadBytes(inputRef, file);
-                inputUrl = await getDownloadURL(inputRef);
-                
-                const maskRef = ref(storage, `users/${userId}/inputs/${Date.now()}_mask.png`);
-                await uploadBytes(maskRef, maskBlob);
-                maskUrl = await getDownloadURL(maskRef);
-                console.log('✅ Files also backed up to Firebase');
-            } catch (firebaseError) {
-                console.warn('⚠️ Firebase backup failed (continuing anyway):', firebaseError);
-            }
-            
+            // 4. Save to Firestore (metadata + inputUrl for preview)
             const creationRef = await addDoc(collection(db, `users/${userId}/creations`), {
                 type: 'background-changer',
-                inputUrl,
-                maskUrl,
                 prompt,
+                inputUrl: inputUrl, // Save immediately for gallery preview
                 runId: data.run_id,
                 createdAt: serverTimestamp(),
                 status: 'processing'
             });
-            const creationId = creationRef.id;
-            console.log('✅ Firestore record created:', creationId);
 
-            // 5. Start polling for results (pass creationId and userId)
-            console.log('🔄 Starting to poll for results...');
-            pollForResults(data.run_id, creationId, userId);
+            // Optimistically update local credits to reflect the cost immediately
+            setCredits(prev => prev - COST_PER_GENERATION);
+
+            pollForResults(data.run_id, creationRef.id, userId);
 
         } catch (error) {
-            console.error('❌ Generation error:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
+            console.error(error);
             alert('Error: ' + error.message);
             setLoading(false);
-            setStatusText('');
         }
     };
 
@@ -645,7 +383,22 @@ const BackgroundChanger = () => {
             </button>
 
             <div className="glass" style={{ padding: '2rem' }}>
-                <h2 style={{ fontSize: '2rem', marginBottom: '1.5rem', textAlign: 'center' }}>Change Background</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '2rem' }}>Change Background</h2>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        background: 'rgba(255, 215, 0, 0.15)',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '2rem',
+                        border: '1px solid rgba(255, 215, 0, 0.3)'
+                    }}>
+                        <Coins size={18} style={{ color: '#ffd700' }} />
+                        <span style={{ fontWeight: '600', color: '#ffd700' }}>{credits}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>coins</span>
+                    </div>
+                </div>
 
                 <div style={{ display: 'grid', gap: '2rem' }}>
 
@@ -653,22 +406,33 @@ const BackgroundChanger = () => {
                     {!outputImage && (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                <label style={{ color: 'var(--text-muted)' }}>1. Upload & Mask Product</label>
+                                <label style={{ color: 'var(--text-muted)' }}>
+                                    {imageLoaded ? "2. Draw a Mask over the Text area" : "1. Upload Product Picture (1x1)"}
+                                </label>
 
                                 {imageLoaded && (
-                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                        <Brush size={16} />
-                                        <input
-                                            type="range" min="5" max="50"
-                                            value={brushSize}
-                                            onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                                            style={{ width: '100px' }}
-                                        />
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <Brush size={16} />
+                                            <input
+                                                type="range" min="5" max="50"
+                                                value={brushSize}
+                                                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                                                style={{ width: '100px' }}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handleRemoveImage}
+                                            className="btn btn-secondary"
+                                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255, 50, 50, 0.2)', border: '1px solid rgba(255, 50, 50, 0.4)' }}
+                                        >
+                                            <Trash2 size={16} /> Remove
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
-                            <div 
+                            <div
                                 ref={canvasContainerRef}
                                 style={{
                                     border: '2px dashed var(--glass-border)',
@@ -694,10 +458,8 @@ const BackgroundChanger = () => {
                                     </div>
                                 )}
 
-                                {/* Hidden mask canvas for data generation */}
                                 <canvas ref={maskCanvasRef} style={{ display: 'none' }} />
 
-                                {/* Visible drawing canvas */}
                                 <canvas
                                     ref={canvasRef}
                                     onMouseDown={startDrawing}
@@ -712,7 +474,6 @@ const BackgroundChanger = () => {
                                     }}
                                 />
 
-                                {/* Brush size preview circle */}
                                 {imageLoaded && isHoveringCanvas && (
                                     <div
                                         style={{
@@ -727,13 +488,12 @@ const BackgroundChanger = () => {
                                             transform: 'translate(-50%, -50%)',
                                             zIndex: 1000,
                                             boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 12px rgba(255, 255, 255, 0.4)',
-                                            transition: 'none',
                                             backgroundColor: 'rgba(255, 255, 255, 0.1)'
                                         }}
                                     />
                                 )}
                             </div>
-                            {imageLoaded && <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'center' }}>Draw over the area you want to KEEP (masking functionality).</p>}
+                            {imageLoaded && <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'center' }}>Draw over the area you want to KEEP.</p>}
                         </div>
                     )}
 
@@ -758,7 +518,9 @@ const BackgroundChanger = () => {
                     {/* Step 2: Prompt & Action */}
                     {!outputImage && (
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--text-muted)' }}>2. Describe New Background</label>
+                            <label style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--text-muted)' }}>
+                                {imageLoaded ? "3. Describe New Background" : "2. Describe New Background"}
+                            </label>
                             <textarea
                                 className="glass-input"
                                 rows="3"
@@ -777,11 +539,7 @@ const BackgroundChanger = () => {
 
                             <button
                                 className="btn btn-primary"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    console.log('🔘 Button clicked!');
-                                    handleGenerate();
-                                }}
+                                onClick={handleGenerate}
                                 disabled={loading || !file || !prompt}
                                 style={{
                                     width: '100%',
@@ -797,19 +555,6 @@ const BackgroundChanger = () => {
                                 {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={24} />}
                                 {loading ? statusText || 'Processing...' : 'Generate Magic'}
                             </button>
-                            {!import.meta.env.VITE_COMFY_DEPLOY_API_KEY && (
-                                <div style={{
-                                    marginTop: '1rem',
-                                    padding: '1rem',
-                                    background: 'rgba(239, 68, 68, 0.2)',
-                                    border: '1px solid rgba(239, 68, 68, 0.5)',
-                                    borderRadius: '8px',
-                                    color: '#fca5a5',
-                                    fontSize: '0.9rem'
-                                }}>
-                                    ⚠️ Warning: ComfyDeploy API key not found. Please set VITE_COMFY_DEPLOY_API_KEY in your .env file.
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>
