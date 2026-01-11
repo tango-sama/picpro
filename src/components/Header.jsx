@@ -139,7 +139,7 @@ const Header = ({ user }) => {
               Get Started
             </button>
           )}
-          <UserMenu />
+          <UserMenu authData={user} />
         </div>
       </div>
     </header>

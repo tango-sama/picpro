@@ -20,46 +20,48 @@ const parseJwt = (token) => {
     }
 };
 
-const UserMenu = () => {
+const UserMenu = ({ authData }) => {
     const [user, setUser] = useState(null);
     const [panelOpen, setPanelOpen] = useState(false);
     const [credits, setCredits] = useState(0);
 
     useEffect(() => {
-        fetch('/auth/me', { credentials: 'include' })
-            .then(res => {
-                if (!res.ok) throw new Error('Not logged in');
-                return res.json();
-            })
-            .then(async (data) => {
-                if (data.idToken) {
-                    const decoded = parseJwt(data.idToken);
-                    if (decoded) {
-                        const userId = decoded.sub;
-                        setUser({ ...decoded, uid: userId, idToken: data.idToken });
+        if (!authData || !authData.idToken) {
+            setUser(null);
+            return;
+        }
 
-                        const userDocRef = doc(db, 'users', userId);
-                        const userDoc = await getDoc(userDocRef);
+        const processAuth = async () => {
+            const data = authData;
+            if (data.idToken) {
+                const decoded = parseJwt(data.idToken);
+                if (decoded) {
+                    const userId = decoded.sub;
+                    setUser({ ...decoded, uid: userId, idToken: data.idToken });
 
-                        if (!userDoc.exists()) {
-                            await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
-                        }
+                    const userDocRef = doc(db, 'users', userId);
+                    const userDoc = await getDoc(userDocRef);
 
-                        onSnapshot(userDocRef, (docSnap) => {
-                            if (docSnap.exists()) {
-                                setCredits(docSnap.data().credits ?? INITIAL_CREDITS);
-                            }
-                        });
-
-                        try {
-                            const credential = GoogleAuthProvider.credential(data.idToken);
-                            await signInWithCredential(auth, credential);
-                        } catch (err) { }
+                    if (!userDoc.exists()) {
+                        await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
                     }
+
+                    onSnapshot(userDocRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            setCredits(docSnap.data().credits ?? INITIAL_CREDITS);
+                        }
+                    });
+
+                    try {
+                        const credential = GoogleAuthProvider.credential(data.idToken);
+                        await signInWithCredential(auth, credential);
+                    } catch (err) { }
                 }
-            })
-            .catch(() => setUser(null));
-    }, []);
+            }
+        };
+
+        processAuth();
+    }, [authData]);
 
     if (!user) return null;
 

@@ -20,6 +20,7 @@ const MyCreationsPage = () => {
     const [activeFilter, setActiveFilter] = useState('all');
     const [selectedImage, setSelectedImage] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(null);
 
     // Fetch user from custom session
     useEffect(() => {
