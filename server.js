@@ -137,7 +137,8 @@ import {
   doc,
   getDoc,
   updateDoc,
-  increment
+  increment,
+  setDoc
 } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -202,8 +203,7 @@ app.post('/api/generate', async (req, res) => {
     })
 
     console.log(
-      `Deducted ${COST} credits from user ${userId}. New balance: ${
-        currentCredits - COST
+      `Deducted ${COST} credits from user ${userId}. New balance: ${currentCredits - COST
       }`
     )
   } catch (dbError) {
@@ -270,10 +270,10 @@ app.get('/api/run/:run_id', async (req, res) => {
 })
 
 app.get('/auth/logout', (req, res) => {
-  // Clear the session cookie
   res.clearCookie('session')
   res.status(200).send('Logged out')
 })
+
 
 // Catch-all handler for any request that doesn't match the above
 app.get(/.*/, (req, res) => {

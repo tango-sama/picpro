@@ -66,22 +66,27 @@ const Dashboard = () => {
     })).filter(group => group.items.length > 0);
 
     return (
-        <div className="animate-fadeIn" style={{ padding: '160px 0 80px' }}>
+        <div className="animate-fadeIn" style={{ padding: 'clamp(120px, 15vw, 160px) 0 clamp(50px, 8vw, 80px)' }}>
             <div className="container">
 
                 {/* Header */}
-                <div style={{ marginBottom: '4rem' }}>
-                    <h2 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '0.5rem', letterSpacing: '-0.04em' }}>
+                <div style={{ marginBottom: 'clamp(2.5rem, 5vw, 4rem)' }}>
+                    <h2 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: '800', marginBottom: '0.5rem', letterSpacing: '-0.04em' }}>
                         Welcome back, <span className="text-gradient">{currentUser?.name?.split(' ')[0] || 'Creator'}</span>
                     </h2>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem' }}>Ready to push the limits of your product visuals?</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 'clamp(1rem, 2vw, 1.2rem)' }}>Ready to push the limits of your product visuals?</p>
                 </div>
 
                 {/* Quick Launch */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', marginBottom: '6rem' }}>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+                    gap: 'clamp(1.25rem, 2.5vw, 2rem)',
+                    marginBottom: 'clamp(3rem, 6vw, 6rem)'
+                }}>
                     {tools.map((tool) => (
                         <div key={tool.id} className="glass" style={{
-                            padding: '2.5rem', borderRadius: '2rem', cursor: 'pointer',
+                            padding: 'clamp(1.5rem, 3vw, 2.5rem)', borderRadius: '2rem', cursor: 'pointer',
                             transition: 'all 0.3s var(--ease-out)', position: 'relative', overflow: 'hidden'
                         }}
                             onMouseEnter={(e) => {
@@ -103,9 +108,9 @@ const Dashboard = () => {
                             }}>
                                 {tool.icon}
                             </div>
-                            <h3 style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>{tool.title}</h3>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '2rem' }}>{tool.description}</p>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: tool.color, fontWeight: 700, fontSize: '0.9rem' }}>
+                            <h3 style={{ fontSize: 'clamp(1.2rem, 2vw, 1.5rem)', marginBottom: '0.75rem' }}>{tool.title}</h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: 'clamp(0.85rem, 1.2vw, 0.95rem)', marginBottom: '2rem' }}>{tool.description}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: tool.color, fontWeight: 700, fontSize: 'clamp(0.8rem, 1.2vw, 0.9rem)' }}>
                                 Open Tool <ArrowRight size={16} />
                             </div>
                             {tool.path === null && <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem' }} className="badge-soon">Soon</div>}
@@ -115,18 +120,18 @@ const Dashboard = () => {
 
                 {/* Recent Activity */}
                 <section>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                        <h3 style={{ fontSize: '1.8rem', fontWeight: '700' }}>Recent Creations</h3>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h3 style={{ fontSize: 'clamp(1.4rem, 3vw, 1.8rem)', fontWeight: '700' }}>Recent Creations</h3>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                             <button
                                 className="btn btn-secondary"
                                 onClick={() => { setLoading(true); setCreations([]); setCurrentUser({ ...currentUser }); }} // Trigger re-fetch logic
-                                style={{ padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                style={{ padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }}
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 21h5v-5" /></svg>
                                 Refresh
                             </button>
-                            <button className="btn btn-secondary" onClick={() => navigate('/my-creations')}>View All</button>
+                            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => navigate('/my-creations')}>View All</button>
                         </div>
                     </div>
 
@@ -135,7 +140,7 @@ const Dashboard = () => {
                             <Loader2 className="animate-spin" size={40} color="var(--primary)" />
                         </div>
                     ) : groupedCreations.length > 0 ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 200px), 1fr))', gap: 'clamp(1rem, 2vw, 2rem)' }}>
                             {creations.slice(0, 8).map((item) => (
                                 <div key={item.id} className="glass" style={{
                                     borderRadius: '1.5rem', overflow: 'hidden', position: 'relative',
@@ -152,13 +157,13 @@ const Dashboard = () => {
                             ))}
                         </div>
                     ) : (
-                        <div className="glass" style={{ padding: '5rem 2rem', textAlign: 'center', borderRadius: '2.5rem' }}>
+                        <div className="glass" style={{ padding: 'clamp(3rem, 6vw, 5rem) clamp(1rem, 3vw, 2rem)', textAlign: 'center', borderRadius: '2.5rem' }}>
                             <div style={{ width: '80px', height: '80px', background: 'rgba(255,255,255,0.03)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem' }}>
                                 <Sparkles size={32} color="var(--text-muted)" />
                             </div>
-                            <h4 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>No creations yet</h4>
-                            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Start your first project with the Background Changer.</p>
-                            <button className="btn btn-primary" onClick={() => navigate('/tool/background-changer')}>
+                            <h4 style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.5rem)', marginBottom: '1rem' }}>No creations yet</h4>
+                            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', fontSize: 'clamp(0.9rem, 1.5vw, 1rem)' }}>Start your first project with the Background Changer.</p>
+                            <button className="btn btn-primary" style={{ width: 'auto' }} onClick={() => navigate('/tool/background-changer')}>
                                 Go to Background Changer
                             </button>
                         </div>
@@ -168,16 +173,16 @@ const Dashboard = () => {
 
             {/* Modal */}
             {selectedImage && (
-                <div className="animate-fadeIn" onClick={() => setSelectedImage(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.95)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-                    <div className="glass" style={{ position: 'relative', maxWidth: '1000px', width: '100%', padding: '2rem', borderRadius: '2.5rem' }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setSelectedImage(null)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer' }}><X size={24} /></button>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '3rem', alignItems: 'center' }}>
+                <div className="animate-fadeIn" onClick={() => setSelectedImage(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.95)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(1rem, 3vw, 2rem)' }}>
+                    <div className="glass" style={{ position: 'relative', maxWidth: '1000px', width: '100%', padding: 'clamp(1.5rem, 3vw, 2rem)', borderRadius: '2.5rem' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setSelectedImage(null)} style={{ position: 'absolute', top: 'clamp(1rem, 2vw, 1.5rem)', right: 'clamp(1rem, 2vw, 1.5rem)', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer' }}><X size={24} /></button>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 'clamp(2rem, 4vw, 3rem)', alignItems: 'center' }}>
                             <img src={selectedImage.outputUrl} alt="Result" style={{ width: '100%', borderRadius: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }} />
                             <div>
-                                <h3 style={{ fontSize: '1.8rem', marginBottom: '1.5rem' }}>Details</h3>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '1rem', marginBottom: '2rem' }}>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Prompt Used</p>
-                                    <p style={{ fontSize: '1.1rem', lineHeight: 1.5 }}>{selectedImage.prompt}</p>
+                                <h3 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 1.8rem)', marginBottom: '1.5rem' }}>Details</h3>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: 'clamp(1rem, 2vw, 1.5rem)', borderRadius: '1rem', marginBottom: '2rem' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.75rem, 1.2vw, 0.85rem)', marginBottom: '0.5rem' }}>Prompt Used</p>
+                                    <p style={{ fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)', lineHeight: 1.5 }}>{selectedImage.prompt}</p>
                                 </div>
                                 <a href={selectedImage.outputUrl} download target="_blank" rel="noreferrer" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
                                     <Download size={20} /> Download High-Res

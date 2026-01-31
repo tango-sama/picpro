@@ -102,7 +102,7 @@ const AboutPage = () => {
                     onClick={() => window.location.href = '/auth/google'}
                     style={{ padding: '1.2rem 3.5rem', fontSize: '1.2rem' }}
                 >
-                    <Rocket size={20} /> Get Started Now
+                    <img src="/logo.png" alt="PicPro Logo" style={{ width: '24px', height: '24px', marginRight: '0.5rem', verticalAlign: 'middle' }} /> Get Started Now
                 </button>
             </div>
         </div>

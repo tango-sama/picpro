@@ -57,7 +57,7 @@ const FeatureImageToVideo = () => {
                     background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(168, 85, 247, 0.05))',
                     border: '1px solid rgba(168, 85, 247, 0.2)'
                 }}>
-                    <Rocket size={48} className="text-gradient" style={{ marginBottom: '2rem' }} />
+                    <img src="/logo.png" alt="PicPro Logo" style={{ width: '48px', height: '48px', marginBottom: '2rem' }} />
                     <h2 style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>Coming Soon</h2>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '3rem', fontSize: '1.25rem', maxWidth: '600px', margin: '0 auto' }}>
                         We're currently fine-tuning our motion engine. Be the first to know when it's live.

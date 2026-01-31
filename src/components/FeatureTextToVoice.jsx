@@ -57,7 +57,7 @@ const FeatureTextToVoice = () => {
                     background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(236, 72, 153, 0.05))',
                     border: '1px solid rgba(236, 72, 153, 0.2)'
                 }}>
-                    <Rocket size={48} className="text-gradient" style={{ marginBottom: '2rem' }} />
+                    <img src="/logo.png" alt="PicPro Logo" style={{ width: '48px', height: '48px', marginBottom: '2rem' }} />
                     <h2 style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>Coming Soon</h2>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '3rem', fontSize: '1.25rem', maxWidth: '600px', margin: '0 auto' }}>
                         Our vocal synthesizer is in final training. Get early access by joining the list.
