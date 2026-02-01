@@ -83,7 +83,7 @@ const MyCreationsPage = ({ user }) => {
             </button>
 
             <div style={{ marginBottom: '2rem' }}>
-                <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>My Creations</h2>
+                <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Gallery</h2>
                 <p style={{ color: 'var(--text-muted)' }}>View and manage all your generated content</p>
             </div>
 

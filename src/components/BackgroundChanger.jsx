@@ -788,24 +788,24 @@ const BackgroundChanger = ({ user }) => {
                             >
                                 {loading ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', color: '#ffffff', fontWeight: '600' }}>
                                             <span>{statusText || 'Processing...'}</span>
-                                            <span style={{ fontWeight: '700', color: 'var(--primary)' }}>{progress}%</span>
+                                            <span style={{ fontWeight: '700', color: '#ffffff' }}>{progress}%</span>
                                         </div>
                                         <div style={{
                                             width: '100%',
                                             height: '8px',
-                                            background: 'rgba(255,255,255,0.05)',
+                                            background: 'rgba(255,255,255,0.15)',
                                             borderRadius: '4px',
                                             overflow: 'hidden',
-                                            border: '1px solid var(--glass-border)'
+                                            border: '1px solid rgba(255,255,255,0.2)'
                                         }}>
                                             <div style={{
                                                 width: `${progress}%`,
                                                 height: '100%',
-                                                background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
+                                                background: 'linear-gradient(90deg, #ffffff, #e0e0e0)',
                                                 transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                                boxShadow: '0 0 10px var(--primary-glow)'
+                                                boxShadow: '0 0 15px rgba(255,255,255,0.6)'
                                             }} />
                                         </div>
                                     </div>

@@ -139,7 +139,7 @@ const Header = ({ user }) => {
                   <span onClick={() => navigate('/my-creations')}
                     style={{ color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'color 0.2s' }}
                     onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
-                    onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>My Creations</span>
+                    onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>Gallery</span>
                 </li>
               )}
 
@@ -239,7 +239,7 @@ const Header = ({ user }) => {
                 </div>
               ))}
 
-              {/* My Creations - Only show for logged in users */}
+              {/* Gallery - Only show for logged in users */}
               {user && (
                 <>
                   <div className="mobile-menu-section-title">MY WORK</div>
@@ -248,7 +248,7 @@ const Header = ({ user }) => {
                       <Sparkles size={22} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', fontSize: '1rem' }}>My Creations</div>
+                      <div style={{ fontWeight: '700', fontSize: '1rem' }}>Gallery</div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>View all your projects</div>
                     </div>
                   </div>
