@@ -139,8 +139,12 @@ import {
   getDoc,
   updateDoc,
   increment,
-  setDoc
+  setDoc,
+  collection,
+  addDoc,
+  serverTimestamp
 } from 'firebase/firestore'
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -154,6 +158,83 @@ const firebaseConfig = {
 // Initialize Firebase App for backend
 const firebaseApp = initializeApp(firebaseConfig)
 const db = getFirestore(firebaseApp)
+const storage = getStorage(firebaseApp)
+
+/**
+ * Background worker to poll for results and save to gallery
+ * This ensures the photo is saved even if user refreshes/disconnects.
+ */
+async function startGenerationWorker(runId, userId, creationId) {
+  console.log(`[Worker] Starting for run ${runId} (User: ${userId})`)
+  const apiKey = process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
+
+  let attempts = 0
+  const maxAttempts = 60 // 5 minutes at 5s interval
+
+  const interval = setInterval(async () => {
+    attempts++
+    if (attempts > maxAttempts) {
+      console.error(`[Worker] Timed out for run ${runId}`)
+      clearInterval(interval)
+      return
+    }
+
+    try {
+      const response = await axios.get(`https://api.comfydeploy.com/api/run/${runId}`, {
+        headers: { Authorization: `Bearer ${apiKey}` }
+      })
+      const data = response.data
+
+      if (data.outputs && data.outputs.length > 0) {
+        let outputUrl = null
+        for (const output of data.outputs) {
+          if (output.data?.output_images?.[0]?.url) {
+            outputUrl = output.data.output_images[0].url
+            break
+          }
+          if (output.data?.images?.[0]?.url) {
+            outputUrl = output.data.images[0].url
+            break
+          }
+        }
+
+        if (outputUrl) {
+          clearInterval(interval)
+          console.log(`[Worker] Found output for ${runId}. Proccessing save...`)
+
+          // 1. Download image
+          const imageRes = await axios.get(outputUrl, { responseType: 'arraybuffer' })
+          const buffer = Buffer.from(imageRes.data)
+
+          // 2. Upload to Firebase Storage
+          const storagePath = `users/${userId}/outputs/${runId}.png`
+          const storageRef = ref(storage, storagePath)
+          await uploadBytes(storageRef, buffer, { contentType: 'image/png' })
+          const downloadUrl = await getDownloadURL(storageRef)
+
+          // 3. Update Firestore
+          const creationRef = doc(db, `users/${userId}/creations`, creationId)
+          await updateDoc(creationRef, {
+            outputUrl: downloadUrl,
+            status: 'completed',
+            completedAt: serverTimestamp()
+          })
+
+          console.log(`[Worker] Successfully saved ${runId} to gallery.`)
+        }
+      } else if (data.status === 'failed') {
+        clearInterval(interval)
+        console.error(`[Worker] Run ${runId} failed.`)
+        await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
+          status: 'failed',
+          error: 'AI generation failed'
+        })
+      }
+    } catch (error) {
+      console.error(`[Worker] Error polling ${runId}:`, error.message)
+    }
+  }, 5000)
+}
 
 // Proxy to ComfyDeploy
 app.post('/api/generate', async (req, res) => {
@@ -231,7 +312,25 @@ app.post('/api/generate', async (req, res) => {
         }
       }
     )
-    res.json(response.data)
+
+    const runId = response.data.run_id
+
+    // 3. Create Creation Record in Firestore (Server-side)
+    // We do it here so it exists even if the client crashes immediately
+    const toolType = deployment_id === "0229e028-c785-4e35-8317-cbde43ccfa01" ? 'background-changer' : 'ai-generation';
+    const creationRef = await addDoc(collection(db, `users/${userId}/creations`), {
+      type: toolType,
+      prompt: inputs.input_text || 'AI Creation',
+      inputUrl: inputs.input_image || null,
+      runId: runId,
+      createdAt: serverTimestamp(),
+      status: 'processing'
+    })
+
+    // 4. Start Background Worker
+    startGenerationWorker(runId, userId, creationRef.id)
+
+    res.json({ ...response.data, creationId: creationRef.id })
   } catch (error) {
     console.error('ComfyDeploy Error:', error.response?.data || error.message)
     // Ideally render a refund here if the API call fails, but keeping it simple for now as requested strictness.

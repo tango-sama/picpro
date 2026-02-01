@@ -22,11 +22,22 @@ function AppContent() {
 
   useEffect(() => {
     fetch('/auth/me', { credentials: 'include' })
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Unauthorized');
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.idToken) {
+          try {
+            const base64Url = data.idToken.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+            setUser({ uid: payload.sub, ...payload, idToken: data.idToken });
+          } catch (e) {
+            console.error('Failed to parse token', e);
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
       })
-      .then(data => setUser(data))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -44,7 +55,7 @@ function AppContent() {
         <Routes>
           {/* Landing / Dashboard */}
           <Route path="/" element={
-            user ? <Dashboard /> : (
+            user ? <Dashboard user={user} /> : (
               <>
                 <Hero />
                 <Features user={user} />
@@ -64,12 +75,11 @@ function AppContent() {
           } />
 
           {/* Protected Tool Routes */}
-          <Route path="/tool/background-changer" element={user ? <BackgroundChanger /> : <Navigate to="/feature/background-changer" />} />
-          <Route path="/my-creations" element={user ? <MyCreationsPage /> : <Navigate to="/" />} />
+          <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/" />} />
+          <Route path="/my-creations" element={user ? <MyCreationsPage user={user} /> : <Navigate to="/feature/background-changer" />} />
 
-          {/* Public Pages */}
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/feature/background-changer" element={<FeatureBackgroundChanger />} />
+          <Route path="/feature/background-changer" element={<FeatureBackgroundChanger user={user} />} />
+          <Route path="/tool/background-changer" element={user ? <BackgroundChanger user={user} /> : <Navigate to="/feature/background-changer" />} />
           <Route path="/feature/image-to-video" element={<FeatureImageToVideo />} />
           <Route path="/feature/text-to-voice" element={<FeatureTextToVoice />} />
           <Route path="/pricing" element={<PricingPage />} />

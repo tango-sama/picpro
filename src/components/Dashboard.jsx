@@ -4,30 +4,18 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
 
-const Dashboard = () => {
+const Dashboard = ({ user }) => {
     const navigate = useNavigate();
     const [creations, setCreations] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState(null);
+    const [currentUser, setCurrentUser] = useState(user);
     const [selectedImage, setSelectedImage] = useState(null);
 
     useEffect(() => {
-        fetch('/auth/me', { credentials: 'include' })
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-                if (data?.idToken) {
-                    try {
-                        const base64Url = data.idToken.split('.')[1];
-                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                        const payload = JSON.parse(window.atob(base64));
-                        setCurrentUser({ uid: payload.sub, ...payload });
-                    } catch (e) {
-                        console.error('Failed to parse token', e);
-                    }
-                }
-            })
-            .catch(() => setCurrentUser(null));
-    }, []);
+        if (user) {
+            setCurrentUser(user);
+        }
+    }, [user]);
 
     useEffect(() => {
         const fetchCreations = async () => {
