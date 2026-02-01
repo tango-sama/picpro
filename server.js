@@ -5,8 +5,6 @@ import axios from 'axios'
 import crypto from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
@@ -25,8 +23,7 @@ const PORT = process.env.PORT || 5000
 const CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.VITE_GOOGLE_CLIENT_SECRET
 const REDIRECT_URI = process.env.VITE_GOOGLE_REDIRECT_URI
-const COMFY_API_KEY = process.env.VITE_COMFY_DEPLOY_API_KEY || process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+const COMFY_API_KEY = process.env.VITE_COMFY_DEPLOY_API_KEY
 
 console.log('--- Server Configuration ---')
 console.log('PORT:', PORT)
@@ -49,11 +46,7 @@ app.get('/auth/google', (req, res) => {
     }
 
     const state = generateState()
-    const referer = req.headers.referer || req.headers.origin || 'http://localhost:5173'
-    const origin = new URL(referer).origin
-
     res.cookie('oauth_state', state, { httpOnly: true, sameSite: 'lax' })
-    res.cookie('oauth_origin', origin, { httpOnly: true, sameSite: 'lax' })
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
     authUrl.searchParams.set('client_id', CLIENT_ID)
@@ -101,28 +94,16 @@ app.get('/auth/google/callback', async (req, res) => {
       }
     )
     const { id_token, expires_in } = tokenResponse.data
-    console.log(`[OAuth] Token received, expires in: ${expires_in}s`)
-
     // Create a simple signed session cookie (for demo purposes we just base64‑encode the id_token)
     const sessionToken = Buffer.from(id_token).toString('base64')
-
-    // Set cookie with proper settings
     res.cookie('session', sessionToken, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (ignore short expires_in from Google)
-      sameSite: 'lax',
-      path: '/',
-      secure: false // Set to true in production with HTTPS
+      maxAge: expires_in * 1000,
+      sameSite: 'lax'
     })
-
-    console.log('[OAuth] Session cookie set')
-
     // Redirect back to the front‑end (root of the app)
-    const savedOrigin = req.cookies.oauth_origin || 'http://localhost:5173'
-    res.clearCookie('oauth_origin')
-
-    console.log(`[OAuth] Redirecting to: ${savedOrigin}`)
-    res.redirect(savedOrigin)
+    const baseUrl = new URL(REDIRECT_URI).origin
+    res.redirect(baseUrl)
   } catch (err) {
     console.error('Token exchange error', err.response?.data || err.message)
     res.status(500).send('Authentication failed')
@@ -150,11 +131,6 @@ app.get('/auth/me', (req, res) => {
   }
 })
 
-// Email/Password Authentication Routes
-import { handleSignup, handleLogin } from './server-auth.js'
-app.post('/auth/signup', handleSignup)
-app.post('/auth/login', handleLogin)
-
 // Initialize Firebase for Server
 import { initializeApp } from 'firebase/app'
 import {
@@ -163,12 +139,8 @@ import {
   getDoc,
   updateDoc,
   increment,
-  setDoc,
-  collection,
-  addDoc,
-  serverTimestamp
+  setDoc
 } from 'firebase/firestore'
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -182,106 +154,6 @@ const firebaseConfig = {
 // Initialize Firebase App for backend
 const firebaseApp = initializeApp(firebaseConfig)
 const db = getFirestore(firebaseApp)
-const storage = getStorage(firebaseApp)
-
-/**
- * Background worker to poll for results and save to gallery
- * This ensures the photo is saved even if user refreshes/disconnects.
- */
-async function startGenerationWorker(runId, userId, creationId) {
-  console.log(`[Worker] Starting for run ${runId} (User: ${userId})`)
-  const apiKey = COMFY_API_KEY
-
-  let attempts = 0
-  const maxAttempts = 60 // 5 minutes at 5s interval
-
-  const interval = setInterval(async () => {
-    attempts++
-    if (attempts > maxAttempts) {
-      console.error(`[Worker] Timed out for run ${runId}`)
-      clearInterval(interval)
-      return
-    }
-
-    try {
-      const response = await axios.get(`https://api.comfydeploy.com/api/run/${runId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` }
-      })
-      const data = response.data
-
-      if (data.status === 'success') {
-        clearInterval(interval)
-
-        // Extract output URL from ComfyDeploy response
-        let outputUrl = null
-
-        // Try direct outputs object format (newest API)
-        if (data.outputs && typeof data.outputs === 'object') {
-          const outputValues = Object.values(data.outputs)
-          if (Array.isArray(outputValues[0])) {
-            outputUrl = outputValues[0][0]
-          } else {
-            outputUrl = outputValues[0]
-          }
-        }
-
-        // Try legacy format
-        if (!outputUrl && data.outputs && Array.isArray(data.outputs)) {
-          for (const output of data.outputs) {
-            if (output.data?.output_images?.[0]?.url) {
-              outputUrl = output.data.output_images[0].url
-              break
-            }
-            if (output.data?.images?.[0]?.url) {
-              outputUrl = output.data.images[0].url
-              break
-            }
-          }
-        }
-
-        if (outputUrl) {
-          console.log(`[Worker] Found output for ${runId}. Processing save...`)
-
-          // 1. Download image
-          const imageRes = await axios.get(outputUrl, { responseType: 'arraybuffer' })
-          const buffer = Buffer.from(imageRes.data)
-
-          // 2. Upload to Firebase Storage
-          const storagePath = `users/${userId}/outputs/${runId}.png`
-          const storageRef = ref(storage, storagePath)
-          await uploadBytes(storageRef, buffer, { contentType: 'image/png' })
-          const downloadUrl = await getDownloadURL(storageRef)
-
-          // 3. Update Firestore
-          const creationRef = doc(db, `users/${userId}/creations`, creationId)
-          await updateDoc(creationRef, {
-            outputUrl: downloadUrl,
-            status: 'completed',
-            completedAt: serverTimestamp()
-          })
-
-          console.log(`[Worker] Successfully saved ${runId} to gallery.`)
-          clearInterval(interval)
-        }
-      } else if (data.status === 'failed') {
-        clearInterval(interval)
-        console.error(`[Worker] Run ${runId} failed.`)
-        await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
-          status: 'failed',
-          error: 'AI generation failed'
-        })
-      } else {
-        console.log(`[Worker] Run ${runId} status: ${data.status} (attempt ${attempts}/${maxAttempts})`)
-      }
-    } catch (error) {
-      console.error(`[Worker] Error polling ${runId}:`, error.message)
-      if (error.response) {
-        console.error(`[Worker] Response status: ${error.response.status}`)
-        console.error(`[Worker] Response data:`, error.response.data)
-      }
-    }
-  }, 5000)
-}
 
 // Proxy to ComfyDeploy
 app.post('/api/generate', async (req, res) => {
@@ -359,25 +231,7 @@ app.post('/api/generate', async (req, res) => {
         }
       }
     )
-
-    const runId = response.data.run_id
-
-    // 3. Create Creation Record in Firestore (Server-side)
-    // We do it here so it exists even if the client crashes immediately
-    const toolType = deployment_id === "0229e028-c785-4e35-8317-cbde43ccfa01" ? 'background-changer' : 'ai-generation';
-    const creationRef = await addDoc(collection(db, `users/${userId}/creations`), {
-      type: toolType,
-      prompt: inputs.input_text || 'AI Creation',
-      inputUrl: inputs.input_image || null,
-      runId: runId,
-      createdAt: serverTimestamp(),
-      status: 'processing'
-    })
-
-    // 4. Start Background Worker
-    startGenerationWorker(runId, userId, creationRef.id)
-
-    res.json({ ...response.data, creationId: creationRef.id })
+    res.json(response.data)
   } catch (error) {
     console.error('ComfyDeploy Error:', error.response?.data || error.message)
     // Ideally render a refund here if the API call fails, but keeping it simple for now as requested strictness.

@@ -15,12 +15,10 @@ import PricingPage from './components/PricingPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import RefundPolicy from './components/RefundPolicy';
-import AuthModal from './components/AuthModal';
 
 function AppContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     fetch('/auth/me', { credentials: 'include' })
@@ -67,12 +65,11 @@ function AppContent() {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem' }}>
                       Join thousands of sellers who have scaled their product engagement by 300% using PicPro.
                     </p>
-                    <button className="btn btn-primary" onClick={() => setAuthModalOpen(true)} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
+                    <button className="btn btn-primary" onClick={() => window.location.href = '/auth/google'} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
                       Start Designing for Free
                     </button>
                   </div>
                 </div>
-                <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
               </>
             )
           } />

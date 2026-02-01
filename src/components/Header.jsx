@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Image, Video, Mic, ChevronDown, Rocket, X, Menu, Home, Info as InfoIcon, Sparkles, Coins } from 'lucide-react';
 import UserMenu from './UserMenu';
-import AuthModal from './AuthModal';
 
 const tools = [
   { id: 'bg-changer', title: 'Background Changer', icon: <Image size={20} />, description: 'AI background removal', path: '/tool/background-changer', infoPath: '/feature/background-changer', color: '#6366f1' },
@@ -16,7 +15,6 @@ const Header = ({ user }) => {
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -62,7 +60,7 @@ const Header = ({ user }) => {
   };
 
   const handleLogin = () => {
-    setAuthModalOpen(true);
+    window.location.href = '/auth/google';
   };
 
   return (
@@ -139,7 +137,7 @@ const Header = ({ user }) => {
                   <span onClick={() => navigate('/my-creations')}
                     style={{ color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'color 0.2s' }}
                     onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
-                    onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>Gallery</span>
+                    onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>My Creations</span>
                 </li>
               )}
 
@@ -239,7 +237,7 @@ const Header = ({ user }) => {
                 </div>
               ))}
 
-              {/* Gallery - Only show for logged in users */}
+              {/* My Creations - Only show for logged in users */}
               {user && (
                 <>
                   <div className="mobile-menu-section-title">MY WORK</div>
@@ -248,7 +246,7 @@ const Header = ({ user }) => {
                       <Sparkles size={22} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', fontSize: '1rem' }}>Gallery</div>
+                      <div style={{ fontWeight: '700', fontSize: '1rem' }}>My Creations</div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>View all your projects</div>
                     </div>
                   </div>
@@ -290,8 +288,6 @@ const Header = ({ user }) => {
           </div>
         </>
       )}
-
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </>
   );
 };

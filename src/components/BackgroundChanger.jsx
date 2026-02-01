@@ -8,39 +8,47 @@ import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, setDoc, in
 const COST_PER_GENERATION = 15;
 const INITIAL_CREDITS = 200;
 
-const BackgroundChanger = ({ user }) => {
+const BackgroundChanger = () => {
     const navigate = useNavigate();
     const [file, setFile] = useState(null);
     const [prompt, setPrompt] = useState('');
     const [loading, setLoading] = useState(false);
     const [statusText, setStatusText] = useState('');
-    const [progress, setProgress] = useState(0);
     const [runId, setRunId] = useState(null);
-    const [currentUser, setCurrentUser] = useState(user);
+    const [currentUser, setCurrentUser] = useState(null);
     const [credits, setCredits] = useState(0);
 
-    // Sync currentUser with prop
+    // Fetch user from custom session on mount
     useEffect(() => {
-        if (user) {
-            setCurrentUser(user);
-            fetchCredits(user.uid);
-        }
-    }, [user]);
+        fetch('/auth/me', { credentials: 'include' })
+            .then(res => res.ok ? res.json() : null)
+            .then(async (data) => {
+                if (data?.idToken) {
+                    // Parse JWT to get user info
+                    try {
+                        const base64Url = data.idToken.split('.')[1];
+                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                        const payload = JSON.parse(window.atob(base64));
+                        const userId = payload.sub;
+                        setCurrentUser({ uid: userId, ...payload });
 
-    const fetchCredits = async (userId) => {
-        try {
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-                setCredits(userDoc.data().credits ?? INITIAL_CREDITS);
-            } else {
-                await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
-                setCredits(INITIAL_CREDITS);
-            }
-        } catch (e) {
-            console.error('Failed to fetch credits', e);
-        }
-    };
+                        // Fetch or initialize credits
+                        const userDocRef = doc(db, 'users', userId);
+                        const userDoc = await getDoc(userDocRef);
+                        if (userDoc.exists()) {
+                            setCredits(userDoc.data().credits ?? INITIAL_CREDITS);
+                        } else {
+                            // First time user - create with initial credits
+                            await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
+                            setCredits(INITIAL_CREDITS);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse token or fetch credits', e);
+                    }
+                }
+            })
+            .catch(() => setCurrentUser(null));
+    }, []);
     // Canvas & Mask state
     const [imageLoaded, setImageLoaded] = useState(false);
     const canvasRef = useRef(null);
@@ -388,14 +396,6 @@ const BackgroundChanger = ({ user }) => {
                 const data = await res.json();
                 console.log('Poll:', data);
 
-                // Update progress if available
-                if (data.progress !== undefined) {
-                    setProgress(Math.round(data.progress * 100));
-                } else if (data.status === 'running') {
-                    // Gradual fake progress if no real progress available
-                    setProgress(prev => Math.min(prev + 5, 95));
-                }
-
                 if (data.outputs && data.outputs.length > 0) {
                     let outputUrl = null;
 
@@ -412,15 +412,41 @@ const BackgroundChanger = ({ user }) => {
                     }
 
                     if (outputUrl) {
-                        isCompleted = true;
-                        setOutputImage(outputUrl);
-                        setLoading(false);
-                        setProgress(100);
-                        setStatusText('Done!');
+                        isCompleted = true; // Mark as completed to prevent re-processing
 
-                        // Sync credits after a successful run
-                        if (currentUser?.uid) {
-                            fetchCredits(currentUser.uid);
+                        try {
+                            // Download and save to personal storage
+                            const imageRes = await fetch(outputUrl);
+                            const imageBlob = await imageRes.blob();
+                            const storagePath = `users/${userId}/outputs/${runId}.png`;
+                            const outputRef = ref(storage, storagePath);
+                            await uploadBytes(outputRef, imageBlob);
+                            const downloadUrl = await getDownloadURL(outputRef);
+
+                            setOutputImage(downloadUrl);
+                            setLoading(false);
+                            setStatusText('Done!');
+
+                            if (creationId && userId) {
+                                await updateDoc(doc(db, `users/${userId}/creations`, creationId), {
+                                    outputUrl: downloadUrl,
+                                    status: 'completed',
+                                    completedAt: serverTimestamp()
+                                });
+                                // Credits are derived from server-side check now, no client deduction needed here.
+                                // We can fetch the latest user, but the credit balance in UI might lag slightly until refresh or listener.
+                                // For better UX, we can decrement local state immediately if we trust the server succeeded (it did if we are here).
+                                // Actually, we already decremented local state in handleGenerate assuming success? No, let's sync it.
+                                const userDoc = await getDoc(doc(db, 'users', userId));
+                                if (userDoc.exists()) {
+                                    setCredits(userDoc.data().credits);
+                                }
+                            }
+                        } catch (err) {
+                            console.error("Storage error:", err);
+                            setOutputImage(outputUrl);
+                            setLoading(false);
+                            setStatusText('Done (Remote)!');
                         }
                         return true;
                     }
@@ -453,7 +479,6 @@ const BackgroundChanger = ({ user }) => {
         if (!file || !prompt) return;
         setLoading(true);
         setStatusText('Preparing images...');
-        setProgress(5);
 
         try {
             if (!currentUser) {
@@ -473,21 +498,17 @@ const BackgroundChanger = ({ user }) => {
 
             // 1. Upload original image to TEMP folder (will be auto-cleaned)
             setStatusText('Uploading image...');
-            setProgress(15);
             const tempInputRef = ref(storage, `temp/${Date.now()}_${file.name}`);
             await uploadBytes(tempInputRef, file);
             const inputUrl = await getDownloadURL(tempInputRef);
 
             // 2. Upload mask to TEMP folder
-            setStatusText('Uploading mask...');
-            setProgress(30);
             const maskBlob = await getMaskBlob();
             const tempMaskRef = ref(storage, `temp/${Date.now()}_mask.png`);
             await uploadBytes(tempMaskRef, maskBlob);
             const maskUrl = await getDownloadURL(tempMaskRef);
 
             setStatusText('Triggering AI...');
-            setProgress(45);
 
             // 3. Call backend proxy with Firebase URLs
             const res = await fetch('/api/generate', {
@@ -508,11 +529,20 @@ const BackgroundChanger = ({ user }) => {
 
             setRunId(data.run_id);
 
+            // 4. Save to Firestore (metadata + inputUrl for preview)
+            const creationRef = await addDoc(collection(db, `users/${userId}/creations`), {
+                type: 'background-changer',
+                prompt,
+                inputUrl: inputUrl, // Save immediately for gallery preview
+                runId: data.run_id,
+                createdAt: serverTimestamp(),
+                status: 'processing'
+            });
+
             // Optimistically update local credits to reflect the cost immediately
             setCredits(prev => prev - COST_PER_GENERATION);
 
-            // Start polling for UI feedback
-            pollForResults(data.run_id, data.creationId, userId);
+            pollForResults(data.run_id, creationRef.id, userId);
 
         } catch (error) {
             console.error(error);
@@ -786,35 +816,8 @@ const BackgroundChanger = ({ user }) => {
                                     fontSize: '1.1rem'
                                 }}
                             >
-                                {loading ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', color: '#ffffff', fontWeight: '600' }}>
-                                            <span>{statusText || 'Processing...'}</span>
-                                            <span style={{ fontWeight: '700', color: '#ffffff' }}>{progress}%</span>
-                                        </div>
-                                        <div style={{
-                                            width: '100%',
-                                            height: '8px',
-                                            background: 'rgba(255,255,255,0.15)',
-                                            borderRadius: '4px',
-                                            overflow: 'hidden',
-                                            border: '1px solid rgba(255,255,255,0.2)'
-                                        }}>
-                                            <div style={{
-                                                width: `${progress}%`,
-                                                height: '100%',
-                                                background: 'linear-gradient(90deg, #ffffff, #e0e0e0)',
-                                                transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                                boxShadow: '0 0 15px rgba(255,255,255,0.6)'
-                                            }} />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <Sparkles size={24} />
-                                        Generate Magic
-                                    </>
-                                )}
+                                {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={24} />}
+                                {loading ? statusText || 'Processing...' : 'Generate Magic'}
                             </button>
                         </div>
                     )}

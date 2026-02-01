@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Sparkles, ArrowRight, Play, ShieldCheck, Zap } from 'lucide-react';
-import AuthModal from './AuthModal';
 
 const Hero = () => {
-    const [authModalOpen, setAuthModalOpen] = useState(false);
-
     const handleGetStarted = () => {
-        setAuthModalOpen(true);
+        window.location.href = '/auth/google';
     };
 
     const handleScrollToFeatures = () => {
@@ -99,8 +96,6 @@ const Hero = () => {
                     </div>
                 </div>
             </div>
-
-            <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
         </section>
     );
 };

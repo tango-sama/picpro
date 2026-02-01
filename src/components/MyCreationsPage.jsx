@@ -3,7 +3,6 @@ import { ArrowLeft, Image, Video, Mic, Loader2, X, Download, Trash2 } from 'luci
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import './CreationCard.css';
 
 const INITIAL_CREDITS = 200;
 
@@ -14,30 +13,48 @@ const tools = [
     { id: 'txt-voice', title: 'Text to Voice', icon: <Mic size={18} />, color: '#ec4899', type: 'text-to-voice' },
 ];
 
-const MyCreationsPage = ({ user }) => {
+const MyCreationsPage = () => {
     const navigate = useNavigate();
     const [creations, setCreations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState('all');
     const [selectedImage, setSelectedImage] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(null);
+
+    // Fetch user from custom session
+    useEffect(() => {
+        fetch('/auth/me', { credentials: 'include' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.idToken) {
+                    try {
+                        const base64Url = data.idToken.split('.')[1];
+                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                        const payload = JSON.parse(window.atob(base64));
+                        setCurrentUser({ uid: payload.sub, ...payload });
+                    } catch (e) {
+                        console.error('Failed to parse token', e);
+                    }
+                }
+            })
+            .catch(() => setCurrentUser(null))
+            .finally(() => setAuthLoading(false));
+    }, []);
 
     // Fetch creations when user is available
     useEffect(() => {
         const fetchCreations = async () => {
-            if (!user) {
-                setLoading(false);
-                return;
-            }
+            if (!currentUser) return; // Don't set loading false here, waiting for auth check or user
 
             setLoading(true);
             try {
                 const q = query(
-                    collection(db, `users/${user.uid}/creations`),
+                    collection(db, `users/${currentUser.uid}/creations`),
                     orderBy('createdAt', 'desc')
                 );
                 const querySnapshot = await getDocs(q);
                 const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                console.log('Loaded creations:', docs);
                 setCreations(docs);
             } catch (error) {
                 console.error("Error fetching creations:", error);
@@ -46,8 +63,13 @@ const MyCreationsPage = ({ user }) => {
             }
         };
 
-        fetchCreations();
-    }, [user]);
+        if (currentUser) {
+            fetchCreations();
+        } else if (!authLoading) {
+            // If auth finished and we have no user, stop loading
+            setLoading(false);
+        }
+    }, [currentUser]);
 
     // Filter creations by type
     const filteredCreations = activeFilter === 'all'
@@ -63,7 +85,7 @@ const MyCreationsPage = ({ user }) => {
     const handleDelete = async (creationId) => {
         if (!confirm('Are you sure you want to delete this creation?')) return;
         try {
-            await deleteDoc(doc(db, `users/${user.uid}/creations`, creationId));
+            await deleteDoc(doc(db, `users/${currentUser.uid}/creations`, creationId));
             setCreations(creations.filter(c => c.id !== creationId));
             setSelectedImage(null);
         } catch (error) {
@@ -83,7 +105,7 @@ const MyCreationsPage = ({ user }) => {
             </button>
 
             <div style={{ marginBottom: '2rem' }}>
-                <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Gallery</h2>
+                <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>My Creations</h2>
                 <p style={{ color: 'var(--text-muted)' }}>View and manage all your generated content</p>
             </div>
 
@@ -115,7 +137,7 @@ const MyCreationsPage = ({ user }) => {
                     </button>
                 ))}
                 <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => { setLoading(true); setCreations([]); setCurrentUser({ ...currentUser }); }}
                     className="btn btn-secondary"
                     style={{
                         marginLeft: 'auto', // Push to right
@@ -132,7 +154,7 @@ const MyCreationsPage = ({ user }) => {
             </div>
 
             {/* Creations Grid */}
-            {loading ? (
+            {(loading || authLoading) ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
                     <Loader2 className="animate-spin" size={40} />
                 </div>
@@ -151,23 +173,11 @@ const MyCreationsPage = ({ user }) => {
                             }}
                             onClick={() => item.outputUrl && setSelectedImage(item)}
                         >
-                            {item.outputUrl || item.inputUrl ? (
-                                <img
-                                    src={item.outputUrl || item.inputUrl}
-                                    alt={item.prompt || "Creation"}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    onError={(e) => {
-                                        e.target.style.display = 'none';
-                                        e.target.parentElement.innerHTML += '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.05);"><p style="color: var(--text-muted);">Image not available</p></div>';
-                                    }}
-                                />
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'rgba(255,255,255,0.05)' }}>
-                                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                                        {item.status === 'processing' ? 'Processing...' : 'No preview'}
-                                    </p>
-                                </div>
-                            )}
+                            <img
+                                src={item.outputUrl || item.inputUrl}
+                                alt={item.prompt || "Creation"}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
                             <div className="creation-overlay" style={{
                                 position: 'absolute',
                                 bottom: 0,
@@ -176,10 +186,7 @@ const MyCreationsPage = ({ user }) => {
                                 padding: '1.5rem 1rem 1rem',
                                 background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
                                 opacity: 0,
-                                transition: 'opacity 0.3s ease',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '0.75rem'
+                                transition: 'opacity 0.3s ease'
                             }}>
                                 <p style={{
                                     fontSize: '0.85rem',
@@ -192,53 +199,6 @@ const MyCreationsPage = ({ user }) => {
                                 }}>
                                     {item.status === 'processing' ? '⏳ Processing...' : (item.prompt || 'Untitled')}
                                 </p>
-
-                                {item.outputUrl && (
-                                    <div style={{ display: 'flex', gap: '0.5rem', pointerEvents: 'auto' }}>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedImage(item);
-                                            }}
-                                            style={{
-                                                flex: 1,
-                                                padding: '0.5rem',
-                                                background: 'rgba(99, 102, 241, 0.8)',
-                                                border: 'none',
-                                                borderRadius: '0.5rem',
-                                                color: 'white',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 600,
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={e => e.target.style.background = 'rgba(99, 102, 241, 1)'}
-                                            onMouseLeave={e => e.target.style.background = 'rgba(99, 102, 241, 0.8)'}
-                                        >
-                                            👁️ View
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDelete(item.id);
-                                            }}
-                                            style={{
-                                                padding: '0.5rem 0.75rem',
-                                                background: 'rgba(239, 68, 68, 0.8)',
-                                                border: 'none',
-                                                borderRadius: '0.5rem',
-                                                color: 'white',
-                                                fontSize: '0.8rem',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 1)'}
-                                            onMouseLeave={e => e.target.style.background = 'rgba(239, 68, 68, 0.8)'}
-                                        >
-                                            🗑️
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                             {item.status === 'processing' && (
                                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
