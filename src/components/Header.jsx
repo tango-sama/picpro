@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Image, Video, Mic, ChevronDown, Rocket, X, Menu, Home, Info as InfoIcon, Sparkles, Coins } from 'lucide-react';
 import UserMenu from './UserMenu';
+import AuthModal from './AuthModal';
 
 const tools = [
   { id: 'bg-changer', title: 'Background Changer', icon: <Image size={20} />, description: 'AI background removal', path: '/tool/background-changer', infoPath: '/feature/background-changer', color: '#6366f1' },
@@ -15,6 +16,7 @@ const Header = ({ user }) => {
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -60,7 +62,7 @@ const Header = ({ user }) => {
   };
 
   const handleLogin = () => {
-    window.location.href = '/auth/google';
+    setAuthModalOpen(true);
   };
 
   return (
@@ -288,6 +290,8 @@ const Header = ({ user }) => {
           </div>
         </>
       )}
+
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </>
   );
 };

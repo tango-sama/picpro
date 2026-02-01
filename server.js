@@ -5,6 +5,8 @@ import axios from 'axios'
 import crypto from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
@@ -22,8 +24,9 @@ app.use(express.static(path.join(__dirname, 'dist')))
 const PORT = process.env.PORT || 5000
 const CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.VITE_GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.VITE_GOOGLE_REDIRECT_URI
-const COMFY_API_KEY = process.env.VITE_COMFY_DEPLOY_API_KEY
+const REDIRECT_URI = process.env.VITE_REDIRECT_URI
+const COMFY_API_KEY = process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
 console.log('--- Server Configuration ---')
 console.log('PORT:', PORT)
@@ -46,7 +49,11 @@ app.get('/auth/google', (req, res) => {
     }
 
     const state = generateState()
+    const referer = req.headers.referer || req.headers.origin || 'http://localhost:5173'
+    const origin = new URL(referer).origin
+
     res.cookie('oauth_state', state, { httpOnly: true, sameSite: 'lax' })
+    res.cookie('oauth_origin', origin, { httpOnly: true, sameSite: 'lax' })
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
     authUrl.searchParams.set('client_id', CLIENT_ID)
@@ -102,8 +109,9 @@ app.get('/auth/google/callback', async (req, res) => {
       sameSite: 'lax'
     })
     // Redirect back to the front‑end (root of the app)
-    const baseUrl = new URL(REDIRECT_URI).origin
-    res.redirect(baseUrl)
+    const savedOrigin = req.cookies.oauth_origin || 'http://localhost:5173'
+    res.clearCookie('oauth_origin')
+    res.redirect(savedOrigin)
   } catch (err) {
     console.error('Token exchange error', err.response?.data || err.message)
     res.status(500).send('Authentication failed')
@@ -130,6 +138,11 @@ app.get('/auth/me', (req, res) => {
     res.status(500).json({ error: 'Session processing failed' })
   }
 })
+
+// Email/Password Authentication Routes
+import { handleSignup, handleLogin } from './server-auth.js'
+app.post('/auth/signup', handleSignup)
+app.post('/auth/login', handleLogin)
 
 // Initialize Firebase for Server
 import { initializeApp } from 'firebase/app'
