@@ -179,7 +179,7 @@ const storage = getStorage(firebaseApp)
  */
 async function startGenerationWorker(runId, userId, creationId) {
   console.log(`[Worker] Starting for run ${runId} (User: ${userId})`)
-  const apiKey = process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
+  const apiKey = COMFY_API_KEY
 
   let attempts = 0
   const maxAttempts = 60 // 5 minutes at 5s interval
@@ -234,6 +234,7 @@ async function startGenerationWorker(runId, userId, creationId) {
           })
 
           console.log(`[Worker] Successfully saved ${runId} to gallery.`)
+          clearInterval(interval)
         }
       } else if (data.status === 'failed') {
         clearInterval(interval)
@@ -242,9 +243,15 @@ async function startGenerationWorker(runId, userId, creationId) {
           status: 'failed',
           error: 'AI generation failed'
         })
+      } else {
+        console.log(`[Worker] Run ${runId} status: ${data.status} (attempt ${attempts}/${maxAttempts})`)
       }
     } catch (error) {
       console.error(`[Worker] Error polling ${runId}:`, error.message)
+      if (error.response) {
+        console.error(`[Worker] Response status: ${error.response.status}`)
+        console.error(`[Worker] Response data:`, error.response.data)
+      }
     }
   }, 5000)
 }
