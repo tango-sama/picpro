@@ -13,48 +13,30 @@ const tools = [
     { id: 'txt-voice', title: 'Text to Voice', icon: <Mic size={18} />, color: '#ec4899', type: 'text-to-voice' },
 ];
 
-const MyCreationsPage = () => {
+const MyCreationsPage = ({ user }) => {
     const navigate = useNavigate();
     const [creations, setCreations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState('all');
     const [selectedImage, setSelectedImage] = useState(null);
-    const [authLoading, setAuthLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState(null);
-
-    // Fetch user from custom session
-    useEffect(() => {
-        fetch('/auth/me', { credentials: 'include' })
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-                if (data?.idToken) {
-                    try {
-                        const base64Url = data.idToken.split('.')[1];
-                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                        const payload = JSON.parse(window.atob(base64));
-                        setCurrentUser({ uid: payload.sub, ...payload });
-                    } catch (e) {
-                        console.error('Failed to parse token', e);
-                    }
-                }
-            })
-            .catch(() => setCurrentUser(null))
-            .finally(() => setAuthLoading(false));
-    }, []);
 
     // Fetch creations when user is available
     useEffect(() => {
         const fetchCreations = async () => {
-            if (!currentUser) return; // Don't set loading false here, waiting for auth check or user
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
             setLoading(true);
             try {
                 const q = query(
-                    collection(db, `users/${currentUser.uid}/creations`),
+                    collection(db, `users/${user.uid}/creations`),
                     orderBy('createdAt', 'desc')
                 );
                 const querySnapshot = await getDocs(q);
                 const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log('Loaded creations:', docs);
                 setCreations(docs);
             } catch (error) {
                 console.error("Error fetching creations:", error);
@@ -63,13 +45,8 @@ const MyCreationsPage = () => {
             }
         };
 
-        if (currentUser) {
-            fetchCreations();
-        } else if (!authLoading) {
-            // If auth finished and we have no user, stop loading
-            setLoading(false);
-        }
-    }, [currentUser]);
+        fetchCreations();
+    }, [user]);
 
     // Filter creations by type
     const filteredCreations = activeFilter === 'all'
@@ -85,7 +62,7 @@ const MyCreationsPage = () => {
     const handleDelete = async (creationId) => {
         if (!confirm('Are you sure you want to delete this creation?')) return;
         try {
-            await deleteDoc(doc(db, `users/${currentUser.uid}/creations`, creationId));
+            await deleteDoc(doc(db, `users/${user.uid}/creations`, creationId));
             setCreations(creations.filter(c => c.id !== creationId));
             setSelectedImage(null);
         } catch (error) {
@@ -137,7 +114,7 @@ const MyCreationsPage = () => {
                     </button>
                 ))}
                 <button
-                    onClick={() => { setLoading(true); setCreations([]); setCurrentUser({ ...currentUser }); }}
+                    onClick={() => window.location.reload()}
                     className="btn btn-secondary"
                     style={{
                         marginLeft: 'auto', // Push to right
@@ -154,7 +131,7 @@ const MyCreationsPage = () => {
             </div>
 
             {/* Creations Grid */}
-            {(loading || authLoading) ? (
+            {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
                     <Loader2 className="animate-spin" size={40} />
                 </div>
@@ -173,11 +150,23 @@ const MyCreationsPage = () => {
                             }}
                             onClick={() => item.outputUrl && setSelectedImage(item)}
                         >
-                            <img
-                                src={item.outputUrl || item.inputUrl}
-                                alt={item.prompt || "Creation"}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
+                            {item.outputUrl || item.inputUrl ? (
+                                <img
+                                    src={item.outputUrl || item.inputUrl}
+                                    alt={item.prompt || "Creation"}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.parentElement.innerHTML += '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.05);"><p style="color: var(--text-muted);">Image not available</p></div>';
+                                    }}
+                                />
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'rgba(255,255,255,0.05)' }}>
+                                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                                        {item.status === 'processing' ? 'Processing...' : 'No preview'}
+                                    </p>
+                                </div>
+                            )}
                             <div className="creation-overlay" style={{
                                 position: 'absolute',
                                 bottom: 0,
