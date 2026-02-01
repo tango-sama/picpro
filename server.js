@@ -198,22 +198,38 @@ async function startGenerationWorker(runId, userId, creationId) {
       })
       const data = response.data
 
-      if (data.outputs && data.outputs.length > 0) {
+      if (data.status === 'success') {
+        clearInterval(interval)
+
+        // Extract output URL from ComfyDeploy response
         let outputUrl = null
-        for (const output of data.outputs) {
-          if (output.data?.output_images?.[0]?.url) {
-            outputUrl = output.data.output_images[0].url
-            break
+
+        // Try direct outputs object format (newest API)
+        if (data.outputs && typeof data.outputs === 'object') {
+          const outputValues = Object.values(data.outputs)
+          if (Array.isArray(outputValues[0])) {
+            outputUrl = outputValues[0][0]
+          } else {
+            outputUrl = outputValues[0]
           }
-          if (output.data?.images?.[0]?.url) {
-            outputUrl = output.data.images[0].url
-            break
+        }
+
+        // Try legacy format
+        if (!outputUrl && data.outputs && Array.isArray(data.outputs)) {
+          for (const output of data.outputs) {
+            if (output.data?.output_images?.[0]?.url) {
+              outputUrl = output.data.output_images[0].url
+              break
+            }
+            if (output.data?.images?.[0]?.url) {
+              outputUrl = output.data.images[0].url
+              break
+            }
           }
         }
 
         if (outputUrl) {
-          clearInterval(interval)
-          console.log(`[Worker] Found output for ${runId}. Proccessing save...`)
+          console.log(`[Worker] Found output for ${runId}. Processing save...`)
 
           // 1. Download image
           const imageRes = await axios.get(outputUrl, { responseType: 'arraybuffer' })
