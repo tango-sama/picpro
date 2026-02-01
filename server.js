@@ -101,16 +101,27 @@ app.get('/auth/google/callback', async (req, res) => {
       }
     )
     const { id_token, expires_in } = tokenResponse.data
+    console.log(`[OAuth] Token received, expires in: ${expires_in}s`)
+
     // Create a simple signed session cookie (for demo purposes we just base64‑encode the id_token)
     const sessionToken = Buffer.from(id_token).toString('base64')
+
+    // Set cookie with proper settings
     res.cookie('session', sessionToken, {
       httpOnly: true,
-      maxAge: expires_in * 1000,
-      sameSite: 'lax'
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (ignore short expires_in from Google)
+      sameSite: 'lax',
+      path: '/',
+      secure: false // Set to true in production with HTTPS
     })
+
+    console.log('[OAuth] Session cookie set')
+
     // Redirect back to the front‑end (root of the app)
     const savedOrigin = req.cookies.oauth_origin || 'http://localhost:5173'
     res.clearCookie('oauth_origin')
+
+    console.log(`[OAuth] Redirecting to: ${savedOrigin}`)
     res.redirect(savedOrigin)
   } catch (err) {
     console.error('Token exchange error', err.response?.data || err.message)
