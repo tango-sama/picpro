@@ -24,8 +24,8 @@ app.use(express.static(path.join(__dirname, 'dist')))
 const PORT = process.env.PORT || 5000
 const CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.VITE_GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.VITE_REDIRECT_URI
-const COMFY_API_KEY = process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
+const REDIRECT_URI = process.env.VITE_GOOGLE_REDIRECT_URI
+const COMFY_API_KEY = process.env.VITE_COMFY_DEPLOY_API_KEY || process.env.VITE_COMFY_API_KEY || process.env.COMFY_API_KEY
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
 console.log('--- Server Configuration ---')
