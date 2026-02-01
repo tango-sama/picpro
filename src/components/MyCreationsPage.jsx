@@ -3,6 +3,7 @@ import { ArrowLeft, Image, Video, Mic, Loader2, X, Download, Trash2 } from 'luci
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import './CreationCard.css';
 
 const INITIAL_CREDITS = 200;
 
@@ -175,7 +176,10 @@ const MyCreationsPage = ({ user }) => {
                                 padding: '1.5rem 1rem 1rem',
                                 background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
                                 opacity: 0,
-                                transition: 'opacity 0.3s ease'
+                                transition: 'opacity 0.3s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
                             }}>
                                 <p style={{
                                     fontSize: '0.85rem',
@@ -188,6 +192,53 @@ const MyCreationsPage = ({ user }) => {
                                 }}>
                                     {item.status === 'processing' ? '⏳ Processing...' : (item.prompt || 'Untitled')}
                                 </p>
+
+                                {item.outputUrl && (
+                                    <div style={{ display: 'flex', gap: '0.5rem', pointerEvents: 'auto' }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedImage(item);
+                                            }}
+                                            style={{
+                                                flex: 1,
+                                                padding: '0.5rem',
+                                                background: 'rgba(99, 102, 241, 0.8)',
+                                                border: 'none',
+                                                borderRadius: '0.5rem',
+                                                color: 'white',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={e => e.target.style.background = 'rgba(99, 102, 241, 1)'}
+                                            onMouseLeave={e => e.target.style.background = 'rgba(99, 102, 241, 0.8)'}
+                                        >
+                                            👁️ View
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(item.id);
+                                            }}
+                                            style={{
+                                                padding: '0.5rem 0.75rem',
+                                                background: 'rgba(239, 68, 68, 0.8)',
+                                                border: 'none',
+                                                borderRadius: '0.5rem',
+                                                color: 'white',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 1)'}
+                                            onMouseLeave={e => e.target.style.background = 'rgba(239, 68, 68, 0.8)'}
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                             {item.status === 'processing' && (
                                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
