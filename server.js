@@ -52,7 +52,7 @@ app.get('/auth/google', (req, res) => {
     authUrl.searchParams.set('client_id', CLIENT_ID)
     authUrl.searchParams.set(
       'redirect_uri',
-      `${REDIRECT_URI}/auth/google/callback`
+      REDIRECT_URI
     )
     authUrl.searchParams.set('response_type', 'code')
     authUrl.searchParams.set('scope', 'openid email profile')
@@ -88,7 +88,7 @@ app.get('/auth/google/callback', async (req, res) => {
           client_secret: CLIENT_SECRET,
           code,
           grant_type: 'authorization_code',
-          redirect_uri: `${REDIRECT_URI}/auth/google/callback`
+          redirect_uri: REDIRECT_URI
         },
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       }
@@ -102,7 +102,8 @@ app.get('/auth/google/callback', async (req, res) => {
       sameSite: 'lax'
     })
     // Redirect back to the front‑end (root of the app)
-    res.redirect(REDIRECT_URI)
+    const baseUrl = new URL(REDIRECT_URI).origin
+    res.redirect(baseUrl)
   } catch (err) {
     console.error('Token exchange error', err.response?.data || err.message)
     res.status(500).send('Authentication failed')

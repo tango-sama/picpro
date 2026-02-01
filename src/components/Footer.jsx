@@ -1,7 +1,9 @@
 import React from 'react';
 import { Twitter, Instagram, Linkedin, Github } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Footer = () => {
+    const navigate = useNavigate();
     return (
         <footer style={{ borderTop: '1px solid var(--glass-border)', marginTop: '4rem', padding: '4rem 0 2rem' }}>
             <div className="container">
@@ -18,18 +20,17 @@ const Footer = () => {
                     <div>
                         <h4 style={{ fontWeight: 700, marginBottom: '1rem' }}>Product</h4>
                         <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', color: 'var(--text-muted)' }}>
-                            <li><a href="#" className="hover:text-white">Features</a></li>
-                            <li><a href="#" className="hover:text-white">Pricing</a></li>
-                            <li><a href="#" className="hover:text-white">Gallery</a></li>
+                            <li><span onClick={() => navigate('/pricing')} style={{ cursor: 'pointer' }} className="hover:text-white">Pricing</span></li>
+                            <li><span onClick={() => navigate('/my-creations')} style={{ cursor: 'pointer' }} className="hover:text-white">Gallery</span></li>
                         </ul>
                     </div>
 
                     <div>
-                        <h4 style={{ fontWeight: 700, marginBottom: '1rem' }}>Company</h4>
+                        <h4 style={{ fontWeight: 700, marginBottom: '1rem' }}>Legal</h4>
                         <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', color: 'var(--text-muted)' }}>
-                            <li><a href="#" className="hover:text-white">About</a></li>
-                            <li><a href="#" className="hover:text-white">Blog</a></li>
-                            <li><a href="#" className="hover:text-white">Careers</a></li>
+                            <li><span onClick={() => navigate('/privacy')} style={{ cursor: 'pointer' }} className="hover:text-white">Privacy Policy</span></li>
+                            <li><span onClick={() => navigate('/terms')} style={{ cursor: 'pointer' }} className="hover:text-white">Terms of Service</span></li>
+                            <li><span onClick={() => navigate('/refund-policy')} style={{ cursor: 'pointer' }} className="hover:text-white">Refund Policy</span></li>
                         </ul>
                     </div>
 

@@ -11,6 +11,10 @@ import AboutPage from './components/AboutPage';
 import FeatureBackgroundChanger from './components/FeatureBackgroundChanger';
 import FeatureImageToVideo from './components/FeatureImageToVideo';
 import FeatureTextToVoice from './components/FeatureTextToVoice';
+import PricingPage from './components/PricingPage';
+import TermsOfService from './components/TermsOfService';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import RefundPolicy from './components/RefundPolicy';
 
 function AppContent() {
   const [user, setUser] = useState(null);
@@ -68,6 +72,10 @@ function AppContent() {
           <Route path="/feature/background-changer" element={<FeatureBackgroundChanger />} />
           <Route path="/feature/image-to-video" element={<FeatureImageToVideo />} />
           <Route path="/feature/text-to-voice" element={<FeatureTextToVoice />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" />} />

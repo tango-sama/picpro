@@ -58,6 +58,10 @@ const BackgroundChanger = () => {
     const [outputImage, setOutputImage] = useState(null);
 
     const canvasContainerRef = useRef(null);
+    const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+    const lastPinchDistanceRef = useRef(null);
+    const lastTouchPosRef = useRef(null);
+    const isGesturingRef = useRef(false);
 
     const [cursorVisible, setCursorVisible] = useState(false);
     const cursorRef = useRef(null);
@@ -148,7 +152,66 @@ const BackgroundChanger = () => {
         // Or just let it be.
     };
 
-    // ...
+    // Touch Event Handlers for Zoom/Pan
+    const onTouchStart = (e) => {
+        if (e.touches.length === 2) {
+            isGesturingRef.current = true;
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            lastPinchDistanceRef.current = dist;
+        } else if (e.touches.length === 1) {
+            lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            if (!isGesturingRef.current) {
+                startDrawing(e);
+            }
+        }
+    };
+
+    const onTouchMove = (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+
+            if (lastPinchDistanceRef.current) {
+                const delta = dist / lastPinchDistanceRef.current;
+                const newScale = Math.min(Math.max(transform.scale * delta, 0.5), 5);
+
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                const rect = canvasContainerRef.current.getBoundingClientRect();
+                const mouseX = centerX - rect.left;
+                const mouseY = centerY - rect.top;
+
+                const newX = mouseX - (mouseX - transform.x) * delta;
+                const newY = mouseY - (mouseY - transform.y) * delta;
+
+                setTransform({ x: newX, y: newY, scale: newScale });
+            }
+            lastPinchDistanceRef.current = dist;
+        } else if (e.touches.length === 1 && !isGesturingRef.current) {
+            handleMove(e);
+        } else if (e.touches.length === 1 && isGesturingRef.current) {
+            const dx = e.touches[0].clientX - lastTouchPosRef.current.x;
+            const dy = e.touches[0].clientY - lastTouchPosRef.current.y;
+            setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+            lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+    };
+
+    const onTouchEnd = (e) => {
+        if (e.touches.length === 0) {
+            isGesturingRef.current = false;
+            lastPinchDistanceRef.current = null;
+            lastTouchPosRef.current = null;
+            stopDrawing();
+        }
+    };
 
     // Correct Touch/Mouse coordinate mapping for Zoomed/Panned Canvas
     // We forcing transformOrigin to '0 0' simplifies the logic significantly.

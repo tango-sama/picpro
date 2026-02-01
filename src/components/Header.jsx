@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Image, Video, Mic, ChevronDown, Rocket, X, Menu, Home, Info as InfoIcon, Sparkles } from 'lucide-react';
+import { Image, Video, Mic, ChevronDown, Rocket, X, Menu, Home, Info as InfoIcon, Sparkles, Coins } from 'lucide-react';
 import UserMenu from './UserMenu';
 
 const tools = [
@@ -142,6 +142,13 @@ const Header = ({ user }) => {
               )}
 
               <li>
+                <span onClick={() => navigate('/pricing')}
+                  style={{ color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'color 0.2s' }}
+                  onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
+                  onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>Pricing</span>
+              </li>
+
+              <li>
                 <span onClick={() => navigate('/about')}
                   style={{ color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'color 0.2s' }}
                   onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
@@ -245,6 +252,17 @@ const Header = ({ user }) => {
                   </div>
                 </>
               )}
+
+              {/* Pricing */}
+              <div className="mobile-menu-item" onClick={() => handleNavigation('/pricing')}>
+                <div className="mobile-menu-item-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>
+                  <Coins size={22} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: '700', fontSize: '1rem' }}>Pricing</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>View affordable plans</div>
+                </div>
+              </div>
 
               {/* About */}
               <div className="mobile-menu-section-title">INFO</div>
