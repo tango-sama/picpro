@@ -5,8 +5,8 @@ const LoginModal = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     const handleGoogleSignIn = () => {
-        // Redirect to the backend OAuth endpoint
-        window.location.href = 'http://localhost:5000/auth/google';
+        // Redirect to the backend OAuth endpoint (relative path works in both dev and production)
+        window.location.href = '/auth/google';
     };
 
     return (
