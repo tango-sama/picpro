@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from './firebase';
+import { auth, onAuthStateChanged } from './firebase';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -23,7 +23,7 @@ function AppContent() {
 
   useEffect(() => {
     // Listen to Firebase auth state changes
-    const unsubscribe = onAuthStateChanged((firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         // User is signed in
         const userData = {
