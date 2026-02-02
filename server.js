@@ -52,7 +52,7 @@ app.get('/auth/google', (req, res) => {
     authUrl.searchParams.set('client_id', CLIENT_ID)
     authUrl.searchParams.set(
       'redirect_uri',
-      REDIRECT_URI
+      `${REDIRECT_URI}/auth/google/callback`
     )
     authUrl.searchParams.set('response_type', 'code')
     authUrl.searchParams.set('scope', 'openid email profile')
@@ -88,23 +88,21 @@ app.get('/auth/google/callback', async (req, res) => {
           client_secret: CLIENT_SECRET,
           code,
           grant_type: 'authorization_code',
-          redirect_uri: REDIRECT_URI
+          redirect_uri: `${REDIRECT_URI}/auth/google/callback`
         },
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       }
     )
-    const { id_token, access_token, expires_in } = tokenResponse.data
-    // Store both id_token and access_token for Firebase auth integration
-    const sessionData = JSON.stringify({ id_token, access_token })
-    const sessionToken = Buffer.from(sessionData).toString('base64')
+    const { id_token, expires_in } = tokenResponse.data
+    // Create a simple signed session cookie (for demo purposes we just base64‑encode the id_token)
+    const sessionToken = Buffer.from(id_token).toString('base64')
     res.cookie('session', sessionToken, {
       httpOnly: true,
       maxAge: expires_in * 1000,
       sameSite: 'lax'
     })
     // Redirect back to the front‑end (root of the app)
-    const baseUrl = new URL(REDIRECT_URI).origin
-    res.redirect(baseUrl)
+    res.redirect(REDIRECT_URI)
   } catch (err) {
     console.error('Token exchange error', err.response?.data || err.message)
     res.status(500).send('Authentication failed')
@@ -117,28 +115,15 @@ app.get('/auth/me', (req, res) => {
     const session = req.cookies.session
     if (!session) return res.status(401).json({ loggedIn: false })
 
-    // Decode the session data
-    try {
-      const sessionData = JSON.parse(Buffer.from(session, 'base64').toString('utf-8'))
-      const { id_token, access_token } = sessionData
-
-      if (!id_token || !id_token.includes('.')) {
-        console.error('ERROR: Malformed session token')
-        res.clearCookie('session')
-        return res.status(401).json({ loggedIn: false })
-      }
-
-      res.json({ loggedIn: true, idToken: id_token, accessToken: access_token })
-    } catch (parseError) {
-      // Backward compatibility: try parsing as old format (just id_token)
-      const idToken = Buffer.from(session, 'base64').toString('utf-8')
-      if (!idToken.includes('.')) {
-        console.error('ERROR: Malformed session token')
-        res.clearCookie('session')
-        return res.status(401).json({ loggedIn: false })
-      }
-      res.json({ loggedIn: true, idToken, accessToken: null })
+    // Decode the id_token
+    const idToken = Buffer.from(session, 'base64').toString('utf-8')
+    if (!idToken.includes('.')) {
+      console.error('ERROR: Malformed session token')
+      res.clearCookie('session')
+      return res.status(401).json({ loggedIn: false })
     }
+
+    res.json({ loggedIn: true, idToken })
   } catch (error) {
     console.error('ERROR in /auth/me:', error)
     res.status(500).json({ error: 'Session processing failed' })
@@ -180,24 +165,14 @@ app.post('/api/generate', async (req, res) => {
 
   let userId
   try {
-    const sessionData = JSON.parse(Buffer.from(session, 'base64').toString('utf-8'))
-    const idToken = sessionData.id_token
+    const idToken = Buffer.from(session, 'base64').toString('utf-8')
     const base64Url = idToken.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
     const payload = JSON.parse(Buffer.from(base64, 'base64').toString('ascii'))
     userId = payload.sub
   } catch (e) {
-    // Try old format (backward compatibility)
-    try {
-      const idToken = Buffer.from(session, 'base64').toString('utf-8')
-      const base64Url = idToken.split('.')[1]
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-      const payload = JSON.parse(Buffer.from(base64, 'base64').toString('ascii'))
-      userId = payload.sub
-    } catch (e2) {
-      console.error('Invalid session token:', e2)
-      return res.status(401).json({ error: 'Invalid session' })
-    }
+    console.error('Invalid session token:', e)
+    return res.status(401).json({ error: 'Invalid session' })
   }
 
   if (!userId)

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { auth, onAuthStateChanged } from './firebase';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -22,52 +21,20 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen to Firebase auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        // User is signed in
-        const userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName,
-          picture: firebaseUser.photoURL,
-          emailVerified: firebaseUser.emailVerified
-        };
-        console.log('✅ User authenticated:', userData.email);
-        setUser(userData);
-      } else {
-        // User is signed out
-        console.log('🔒 No user authenticated');
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
+    fetch('/auth/me', { credentials: 'include' })
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Unauthorized');
+      })
+      .then(data => setUser(data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
-    return (
-      <div style={{
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-dark)'
-      }}>
-        <div
-          className="animate-spin"
-          style={{
-            width: '40px',
-            height: '40px',
-            border: '3px solid var(--primary)',
-            borderTopColor: 'transparent',
-            borderRadius: '50%'
-          }}
-        ></div>
-      </div>
-    );
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-dark)' }}>
+      <div className="animate-spin" style={{ width: '40px', height: '40px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
+    </div>;
   }
 
   return (
@@ -77,7 +44,7 @@ function AppContent() {
         <Routes>
           {/* Landing / Dashboard */}
           <Route path="/" element={
-            user ? <Dashboard user={user} /> : (
+            user ? <Dashboard /> : (
               <>
                 <Hero />
                 <Features user={user} />
@@ -87,11 +54,7 @@ function AppContent() {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem' }}>
                       Join thousands of sellers who have scaled their product engagement by 300% using PicPro.
                     </p>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => document.querySelector('[data-login-trigger]')?.click()}
-                      style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}
-                    >
+                    <button className="btn btn-primary" onClick={() => window.location.href = '/auth/google'} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
                       Start Designing for Free
                     </button>
                   </div>
@@ -101,11 +64,12 @@ function AppContent() {
           } />
 
           {/* Protected Tool Routes */}
-          <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/" />} />
-          <Route path="/my-creations" element={user ? <MyCreationsPage user={user} /> : <Navigate to="/feature/background-changer" />} />
+          <Route path="/tool/background-changer" element={user ? <BackgroundChanger /> : <Navigate to="/feature/background-changer" />} />
+          <Route path="/my-creations" element={user ? <MyCreationsPage /> : <Navigate to="/" />} />
 
-          <Route path="/feature/background-changer" element={<FeatureBackgroundChanger user={user} />} />
-          <Route path="/tool/background-changer" element={user ? <BackgroundChanger user={user} /> : <Navigate to="/feature/background-changer" />} />
+          {/* Public Pages */}
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/feature/background-changer" element={<FeatureBackgroundChanger />} />
           <Route path="/feature/image-to-video" element={<FeatureImageToVideo />} />
           <Route path="/feature/text-to-voice" element={<FeatureTextToVoice />} />
           <Route path="/pricing" element={<PricingPage />} />

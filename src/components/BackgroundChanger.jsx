@@ -58,16 +58,98 @@ const BackgroundChanger = () => {
     const [outputImage, setOutputImage] = useState(null);
 
     const canvasContainerRef = useRef(null);
-    const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-    const lastPinchDistanceRef = useRef(null);
-    const lastTouchPosRef = useRef(null);
-    const isGesturingRef = useRef(false);
 
     const [cursorVisible, setCursorVisible] = useState(false);
     const cursorRef = useRef(null);
 
     // Hidden mask canvas
     const maskCanvasRef = useRef(null);
+
+    // Transform state for zoom/pan
+    const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+    const isGesturingRef = useRef(false);
+
+    // Touch gesture handling
+    const lastTouchDistanceRef = useRef(0);
+    const lastTouchCenterRef = useRef({ x: 0, y: 0 });
+    const touchStartTimeRef = useRef(0);
+
+    const onTouchStart = (e) => {
+        if (e.touches.length === 2) {
+            // Two-finger pinch: Start zooming
+            isGesturingRef.current = true;
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t2.clientX - t1.clientX;
+            const dy = t2.clientY - t1.clientY;
+            lastTouchDistanceRef.current = Math.sqrt(dx * dx + dy * dy);
+            lastTouchCenterRef.current = {
+                x: (t1.clientX + t2.clientX) / 2,
+                y: (t1.clientY + t2.clientY) / 2
+            };
+        } else if (e.touches.length === 1 && !imageLoaded) {
+            // Single touch when no image: Prevent default to allow file input
+            return;
+        } else if (e.touches.length === 1 && imageLoaded) {
+            // Single touch when image loaded: Drawing
+            touchStartTimeRef.current = Date.now();
+            startDrawing(e);
+        }
+    };
+
+    const onTouchMove = (e) => {
+        if (e.touches.length === 2) {
+            // Two-finger pinch: Zoom
+            e.preventDefault();
+            isGesturingRef.current = true;
+
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t2.clientX - t1.clientX;
+            const dy = t2.clientY - t1.clientY;
+            const currentDistance = Math.sqrt(dx * dx + dy * dy);
+            const currentCenter = {
+                x: (t1.clientX + t2.clientX) / 2,
+                y: (t1.clientY + t2.clientY) / 2
+            };
+
+            if (lastTouchDistanceRef.current > 0) {
+                const scaleDelta = currentDistance / lastTouchDistanceRef.current;
+                const newScale = Math.max(1, Math.min(transform.scale * scaleDelta, 4));
+
+                // Pan based on center movement
+                const panDeltaX = currentCenter.x - lastTouchCenterRef.current.x;
+                const panDeltaY = currentCenter.y - lastTouchCenterRef.current.y;
+
+                setTransform(prev => ({
+                    x: prev.x + panDeltaX,
+                    y: prev.y + panDeltaY,
+                    scale: newScale
+                }));
+            }
+
+            lastTouchDistanceRef.current = currentDistance;
+            lastTouchCenterRef.current = currentCenter;
+        } else if (e.touches.length === 1 && imageLoaded) {
+            // Single touch: Drawing
+            const touchDuration = Date.now() - touchStartTimeRef.current;
+            if (touchDuration < 100 && !isDrawing) {
+                // Quick tap, might be trying to pan - ignore
+                return;
+            }
+            handleMove(e);
+        }
+    };
+
+    const onTouchEnd = (e) => {
+        if (e.touches.length < 2) {
+            isGesturingRef.current = false;
+            lastTouchDistanceRef.current = 0;
+        }
+        if (e.touches.length === 0) {
+            stopDrawing();
+        }
+    };
 
     const handleFileChange = (e) => {
         if (e.target.files[0]) {
@@ -152,66 +234,7 @@ const BackgroundChanger = () => {
         // Or just let it be.
     };
 
-    // Touch Event Handlers for Zoom/Pan
-    const onTouchStart = (e) => {
-        if (e.touches.length === 2) {
-            isGesturingRef.current = true;
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-            lastPinchDistanceRef.current = dist;
-        } else if (e.touches.length === 1) {
-            lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            if (!isGesturingRef.current) {
-                startDrawing(e);
-            }
-        }
-    };
-
-    const onTouchMove = (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault();
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-
-            if (lastPinchDistanceRef.current) {
-                const delta = dist / lastPinchDistanceRef.current;
-                const newScale = Math.min(Math.max(transform.scale * delta, 0.5), 5);
-
-                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-                const rect = canvasContainerRef.current.getBoundingClientRect();
-                const mouseX = centerX - rect.left;
-                const mouseY = centerY - rect.top;
-
-                const newX = mouseX - (mouseX - transform.x) * delta;
-                const newY = mouseY - (mouseY - transform.y) * delta;
-
-                setTransform({ x: newX, y: newY, scale: newScale });
-            }
-            lastPinchDistanceRef.current = dist;
-        } else if (e.touches.length === 1 && !isGesturingRef.current) {
-            handleMove(e);
-        } else if (e.touches.length === 1 && isGesturingRef.current) {
-            const dx = e.touches[0].clientX - lastTouchPosRef.current.x;
-            const dy = e.touches[0].clientY - lastTouchPosRef.current.y;
-            setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-            lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        }
-    };
-
-    const onTouchEnd = (e) => {
-        if (e.touches.length === 0) {
-            isGesturingRef.current = false;
-            lastPinchDistanceRef.current = null;
-            lastTouchPosRef.current = null;
-            stopDrawing();
-        }
-    };
+    // ...
 
     // Correct Touch/Mouse coordinate mapping for Zoomed/Panned Canvas
     // We forcing transformOrigin to '0 0' simplifies the logic significantly.
