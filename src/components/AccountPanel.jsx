@@ -66,12 +66,19 @@ const AccountPanel = ({ onClose, user }) => {
 
     const handleLogout = async () => {
         try {
+            // Sign out from Firebase client
             const { signOut } = await import('../firebase');
             await signOut();
-            onClose();
-            navigate('/');
+
+            // Clear server session cookie
+            await fetch('/auth/logout', { credentials: 'include' });
+
+            // Reload to clear all state
+            window.location.href = '/';
         } catch (error) {
             console.error('Logout error:', error);
+            // Even if Firebase signout fails, still clear session and reload
+            window.location.href = '/';
         }
     };
 
