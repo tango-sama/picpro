@@ -1,12 +1,11 @@
 // Firebase configuration
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
 
 // Get Firebase config from environment variables
-// Vite requires VITE_ prefix for environment variables
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,9 +16,9 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Validate that all required config values are present
+// Validate configuration
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.warn('Firebase configuration is missing. Please check your .env file.');
+    console.error('⚠️ Firebase configuration is missing! Check your .env file.');
 }
 
 // Initialize Firebase
@@ -28,7 +27,8 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const storage = getStorage(app);
 const db = getFirestore(app);
-// Initialize Analytics only if supported/in client environment
+
+// Initialize Analytics only in client environment
 let analytics;
 if (typeof window !== 'undefined') {
     try {
@@ -38,4 +38,33 @@ if (typeof window !== 'undefined') {
     }
 }
 
-export { app, auth, provider, storage, db, analytics, signInWithCredential, GoogleAuthProvider };
+// Configure Google Auth Provider
+provider.setCustomParameters({
+    prompt: 'select_account'
+});
+
+// Helper function to sign in with Google
+export const signInWithGoogle = async () => {
+    try {
+        const result = await signInWithPopup(auth, provider);
+        console.log('✅ Successfully signed in:', result.user.email);
+        return result.user;
+    } catch (error) {
+        console.error('❌ Sign-in error:', error);
+        throw error;
+    }
+};
+
+// Helper function to sign out
+export const signOut = async () => {
+    try {
+        await firebaseSignOut(auth);
+        console.log('✅ Successfully signed out');
+    } catch (error) {
+        console.error('❌ Sign-out error:', error);
+        throw error;
+    }
+};
+
+// Export everything
+export { app, auth, provider, storage, db, analytics, onAuthStateChanged };

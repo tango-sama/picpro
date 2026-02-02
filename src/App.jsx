@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged } from './firebase';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -21,36 +22,52 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/auth/me', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.idToken) {
-          try {
-            const base64Url = data.idToken.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(window.atob(base64));
-            setUser({
-              uid: payload.sub,
-              ...payload,
-              idToken: data.idToken,
-              accessToken: data.accessToken
-            });
-          } catch (e) {
-            console.error('Failed to parse token', e);
-            setUser(null);
-          }
-        } else {
-          setUser(null);
-        }
-      })
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    // Listen to Firebase auth state changes
+    const unsubscribe = onAuthStateChanged((firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in
+        const userData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName,
+          picture: firebaseUser.photoURL,
+          emailVerified: firebaseUser.emailVerified
+        };
+        console.log('✅ User authenticated:', userData.email);
+        setUser(userData);
+      } else {
+        // User is signed out
+        console.log('🔒 No user authenticated');
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-dark)' }}>
-      <div className="animate-spin" style={{ width: '40px', height: '40px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
-    </div>;
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-dark)'
+      }}>
+        <div
+          className="animate-spin"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid var(--primary)',
+            borderTopColor: 'transparent',
+            borderRadius: '50%'
+          }}
+        ></div>
+      </div>
+    );
   }
 
   return (
@@ -70,7 +87,11 @@ function AppContent() {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem' }}>
                       Join thousands of sellers who have scaled their product engagement by 300% using PicPro.
                     </p>
-                    <button className="btn btn-primary" onClick={() => window.location.href = '/auth/google'} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => document.querySelector('[data-login-trigger]')?.click()}
+                      style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}
+                    >
                       Start Designing for Free
                     </button>
                   </div>

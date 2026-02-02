@@ -1,76 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { User, Coins } from 'lucide-react';
 import AccountPanel from './AccountPanel';
-import { auth, signInWithCredential, GoogleAuthProvider, db } from '../firebase';
+import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 const INITIAL_CREDITS = 200;
 
-const parseJwt = (token) => {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        console.error("Failed to parse JWT", e);
-        return null;
-    }
-};
-
 const UserMenu = ({ authData }) => {
-    const [user, setUser] = useState(null);
-    const [panelOpen, setPanelOpen] = useState(false);
     const [credits, setCredits] = useState(0);
+    const [panelOpen, setPanelOpen] = useState(false);
 
     useEffect(() => {
-        if (!authData || !authData.idToken) {
-            setUser(null);
+        if (!authData || !authData.uid) {
             return;
         }
 
-        const processAuth = async () => {
-            const data = authData;
-            if (data.idToken) {
-                const decoded = parseJwt(data.idToken);
-                if (decoded) {
-                    const userId = decoded.sub;
-                    setUser({ ...decoded, uid: userId, idToken: data.idToken });
+        const initializeUser = async () => {
+            const userId = authData.uid;
+            const userDocRef = doc(db, 'users', userId);
 
-                    const userDocRef = doc(db, 'users', userId);
-                    const userDoc = await getDoc(userDocRef);
+            try {
+                // Check if user document exists, if not create it
+                const userDoc = await getDoc(userDocRef);
 
-                    if (!userDoc.exists()) {
-                        await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
-                    }
-
-                    onSnapshot(userDocRef, (docSnap) => {
-                        if (docSnap.exists()) {
-                            setCredits(docSnap.data().credits ?? INITIAL_CREDITS);
-                        }
+                if (!userDoc.exists()) {
+                    console.log('Creating new user document with initial credits');
+                    await setDoc(userDocRef, {
+                        email: authData.email,
+                        displayName: authData.name,
+                        photoURL: authData.picture,
+                        credits: INITIAL_CREDITS,
+                        createdAt: serverTimestamp(),
+                        lastLogin: serverTimestamp()
                     });
-
-                    // Sign in to Firebase using the Google access token
-                    // This is needed for Firestore security rules to work
-                    if (data.accessToken) {
-                        try {
-                            const credential = GoogleAuthProvider.credential(data.idToken, data.accessToken);
-                            await signInWithCredential(auth, credential);
-                            console.log('Successfully signed in to Firebase');
-                        } catch (err) {
-                            console.error('Firebase sign-in error:', err);
-                        }
-                    }
+                } else {
+                    // Update last login
+                    await setDoc(userDocRef, {
+                        lastLogin: serverTimestamp()
+                    }, { merge: true });
                 }
+
+                // Listen to credit changes in real-time
+                const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setCredits(data.credits ?? INITIAL_CREDITS);
+                    }
+                });
+
+                return unsubscribe;
+            } catch (error) {
+                console.error('Error initializing user:', error);
             }
         };
 
-        processAuth();
+        const unsubscribe = initializeUser();
+
+        return () => {
+            if (unsubscribe && typeof unsubscribe.then === 'function') {
+                unsubscribe.then(unsub => unsub && unsub());
+            }
+        };
     }, [authData]);
 
-    if (!user) return null;
+    if (!authData) return null;
 
     return (
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -96,9 +89,9 @@ const UserMenu = ({ authData }) => {
                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
             >
-                {user.picture ? (
+                {authData.picture ? (
                     <img
-                        src={user.picture}
+                        src={authData.picture}
                         alt="Profile"
                         style={{
                             width: '36px', height: '36px', borderRadius: '50%',
@@ -111,7 +104,7 @@ const UserMenu = ({ authData }) => {
                     </div>
                 )}
             </button>
-            {panelOpen && <AccountPanel user={user} onClose={() => setPanelOpen(false)} />}
+            {panelOpen && <AccountPanel user={authData} onClose={() => setPanelOpen(false)} />}
         </div>
     );
 };

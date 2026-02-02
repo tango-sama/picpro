@@ -24,7 +24,7 @@ const AccountPanel = ({ onClose, user }) => {
     // Fetch credits on mount
     useEffect(() => {
         const fetchCredits = async () => {
-            const userId = user?.sub || auth.currentUser?.uid;
+            const userId = user?.uid || auth.currentUser?.uid;
             if (userId) {
                 try {
                     const userDoc = await getDoc(doc(db, 'users', userId));
@@ -45,7 +45,7 @@ const AccountPanel = ({ onClose, user }) => {
             const fetchCreations = async () => {
                 setLoadingGallery(true);
                 try {
-                    const userId = user?.sub || auth.currentUser?.uid || 'anonymous';
+                    const userId = user?.uid || auth.currentUser?.uid || 'anonymous';
 
                     const q = query(
                         collection(db, `users/${userId}/creations`),
@@ -64,12 +64,15 @@ const AccountPanel = ({ onClose, user }) => {
         }
     }, [activeTab, user]);
 
-    const handleLogout = () => {
-        fetch('/auth/logout', { credentials: 'include' })
-            .then(() => {
-                window.location.href = '/';
-            })
-            .catch(console.error);
+    const handleLogout = async () => {
+        try {
+            const { signOut } = await import('../firebase');
+            await signOut();
+            onClose();
+            navigate('/');
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
     };
 
     const renderContent = () => {
