@@ -29,7 +29,12 @@ function AppContent() {
             const base64Url = data.idToken.split('.')[1];
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
             const payload = JSON.parse(window.atob(base64));
-            setUser({ uid: payload.sub, ...payload, idToken: data.idToken });
+            setUser({
+              uid: payload.sub,
+              ...payload,
+              idToken: data.idToken,
+              accessToken: data.accessToken
+            });
           } catch (e) {
             console.error('Failed to parse token', e);
             setUser(null);

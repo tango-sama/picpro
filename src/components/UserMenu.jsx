@@ -52,10 +52,17 @@ const UserMenu = ({ authData }) => {
                         }
                     });
 
-                    try {
-                        const credential = GoogleAuthProvider.credential(data.idToken);
-                        await signInWithCredential(auth, credential);
-                    } catch (err) { }
+                    // Sign in to Firebase using the Google access token
+                    // This is needed for Firestore security rules to work
+                    if (data.accessToken) {
+                        try {
+                            const credential = GoogleAuthProvider.credential(data.idToken, data.accessToken);
+                            await signInWithCredential(auth, credential);
+                            console.log('Successfully signed in to Firebase');
+                        } catch (err) {
+                            console.error('Firebase sign-in error:', err);
+                        }
+                    }
                 }
             }
         };
