@@ -33,6 +33,18 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             return false;
         }
 
+        // Check for spaces in username
+        if (formData.username.includes(' ')) {
+            setError('Username cannot contain spaces');
+            return false;
+        }
+
+        // Check for invalid characters (only allow alphanumeric, underscore, and dash)
+        if (!/^[a-zA-Z0-9_-]+$/.test(formData.username)) {
+            setError('Username can only contain letters, numbers, underscore (_) and dash (-)');
+            return false;
+        }
+
         if (formData.password.length < 6) {
             setError('Password must be at least 6 characters');
             return false;
@@ -157,7 +169,7 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                         <input
                             type="text"
                             name="username"
-                            placeholder="Username"
+                            placeholder="Username (no spaces)"
                             value={formData.username}
                             onChange={handleChange}
                             style={{

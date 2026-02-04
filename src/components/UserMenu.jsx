@@ -37,6 +37,20 @@ const UserMenu = ({ authData }) => {
                         username = `${baseName}${Math.floor(Math.random() * 9999)}`;
                     }
 
+                    // Sanitize username: remove spaces and special characters
+                    if (username) {
+                        username = username
+                            .toLowerCase()                        // Convert to lowercase
+                            .replace(/\s+/g, '_')                // Replace spaces with underscores
+                            .replace(/[^a-z0-9_-]/g, '')        // Remove special characters (keep only alphanumeric, underscore, dash)
+                            .substring(0, 20);                   // Limit length to 20 characters
+
+                        // If username becomes empty after sanitization, generate a random one
+                        if (!username || username.length < 3) {
+                            username = `user${Math.floor(Math.random() * 999999)}`;
+                        }
+                    }
+
                     // Generate default avatar if no photo provided
                     const defaultPhotoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(username || 'User')}&background=6366f1&color=fff&size=200`;
 
