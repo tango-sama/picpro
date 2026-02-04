@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Upload, Loader2, Sparkles, Brush, Download, Trash2, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { storage, db } from '../firebase';
+import { storage, db, auth, onAuthStateChanged } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, setDoc, increment } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, setDoc, increment, onSnapshot } from 'firebase/firestore';
 
 const COST_PER_GENERATION = 15;
 const INITIAL_CREDITS = 200;
@@ -18,36 +18,44 @@ const BackgroundChanger = () => {
     const [currentUser, setCurrentUser] = useState(null);
     const [credits, setCredits] = useState(0);
 
-    // Fetch user from custom session on mount
+    // Listen to Firebase auth state
     useEffect(() => {
-        fetch('/auth/me', { credentials: 'include' })
-            .then(res => res.ok ? res.json() : null)
-            .then(async (data) => {
-                if (data?.idToken) {
-                    // Parse JWT to get user info
-                    try {
-                        const base64Url = data.idToken.split('.')[1];
-                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                        const payload = JSON.parse(window.atob(base64));
-                        const userId = payload.sub;
-                        setCurrentUser({ uid: userId, ...payload });
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                setCurrentUser(firebaseUser);
 
-                        // Fetch or initialize credits
-                        const userDocRef = doc(db, 'users', userId);
-                        const userDoc = await getDoc(userDocRef);
-                        if (userDoc.exists()) {
-                            setCredits(userDoc.data().credits ?? INITIAL_CREDITS);
-                        } else {
-                            // First time user - create with initial credits
-                            await setDoc(userDocRef, { credits: INITIAL_CREDITS, createdAt: serverTimestamp() });
-                            setCredits(INITIAL_CREDITS);
-                        }
-                    } catch (e) {
-                        console.error('Failed to parse token or fetch credits', e);
+                // Fetch credits from Firestore
+                const userDocRef = doc(db, 'users', firebaseUser.uid);
+
+                try {
+                    const userDoc = await getDoc(userDocRef);
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        // Support both new nested structure and legacy flat structure
+                        const userCredits = userData.billing?.credits ?? userData.credits ?? INITIAL_CREDITS;
+                        setCredits(userCredits);
+
+                        // Set up real-time listener for credit updates
+                        const creditUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                const updatedCredits = data.billing?.credits ?? data.credits ?? INITIAL_CREDITS;
+                                setCredits(updatedCredits);
+                            }
+                        });
+
+                        return () => creditUnsubscribe();
                     }
+                } catch (error) {
+                    console.error('Error fetching credits:', error);
                 }
-            })
-            .catch(() => setCurrentUser(null));
+            } else {
+                setCurrentUser(null);
+                setCredits(0);
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
     // Canvas & Mask state
     const [imageLoaded, setImageLoaded] = useState(false);
