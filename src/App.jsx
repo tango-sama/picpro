@@ -15,20 +15,35 @@ import PricingPage from './components/PricingPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import RefundPolicy from './components/RefundPolicy';
+import { auth, onAuthStateChanged } from './firebase';
 
 function AppContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/auth/me', { credentials: 'include' })
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Unauthorized');
-      })
-      .then(data => setUser(data))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    // Listen to Firebase authentication state changes
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in - map Firebase user to app user format
+        const mappedUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+          picture: firebaseUser.photoURL,
+          emailVerified: firebaseUser.emailVerified,
+          providerData: firebaseUser.providerData
+        };
+        setUser(mappedUser);
+      } else {
+        // User is signed out
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
@@ -54,7 +69,7 @@ function AppContent() {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem' }}>
                       Join thousands of sellers who have scaled their product engagement by 300% using PicPro.
                     </p>
-                    <button className="btn btn-primary" onClick={() => window.location.href = '/auth/google'} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
+                    <button className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('openLoginModal'))} style={{ padding: '1.2rem 3rem', fontSize: '1.2rem' }}>
                       Start Designing for Free
                     </button>
                   </div>

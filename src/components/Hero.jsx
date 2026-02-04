@@ -3,7 +3,8 @@ import { Sparkles, ArrowRight, Play, ShieldCheck, Zap } from 'lucide-react';
 
 const Hero = () => {
     const handleGetStarted = () => {
-        window.location.href = '/auth/google';
+        // Trigger login modal via custom event
+        window.dispatchEvent(new CustomEvent('openLoginModal'));
     };
 
     const handleScrollToFeatures = () => {

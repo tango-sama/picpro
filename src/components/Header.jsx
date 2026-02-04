@@ -47,6 +47,15 @@ const Header = ({ user }) => {
     };
   }, [mobileMenuOpen]);
 
+  // Listen for login modal trigger from Hero component
+  useEffect(() => {
+    const handleOpenLoginModal = () => {
+      setLoginModalOpen(true);
+    };
+    window.addEventListener('openLoginModal', handleOpenLoginModal);
+    return () => window.removeEventListener('openLoginModal', handleOpenLoginModal);
+  }, []);
+
   const handleToolClick = (tool) => {
     setFeaturesOpen(false);
     setMobileMenuOpen(false);
