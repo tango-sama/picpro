@@ -24,44 +24,108 @@ const UserMenu = ({ authData }) => {
                 const userDoc = await getDoc(userDocRef);
 
                 if (!userDoc.exists()) {
-                    console.log('Creating new user document with initial credits');
+                    console.log('✅ Creating new user account in database...');
 
-                    // Determine auth method (Google or Email/Password)
+                    // Determine authentication method
                     const authMethod = authData.providerData?.[0]?.providerId === 'google.com' ? 'google' : 'email';
 
-                    // Generate username if using Google (or use displayName if available)
+                    // Generate or extract username
                     let username = authData.name || authData.displayName;
                     if (authMethod === 'google' && !username) {
-                        // Generate from email
+                        // Auto-generate username from email
                         const baseName = authData.email.split('@')[0];
                         username = `${baseName}${Math.floor(Math.random() * 9999)}`;
                     }
 
-                    // Default profile picture if none provided
-                    const defaultPhotoURL = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(username || 'User') + '&background=6366f1&color=fff&size=200';
+                    // Generate default avatar if no photo provided
+                    const defaultPhotoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(username || 'User')}&background=6366f1&color=fff&size=200`;
+
+                    // Create structured user document with clear field organization
+                    const newUserData = {
+                        // === ACCOUNT IDENTIFIERS ===
+                        userId: authData.uid,                    // Firebase UID (primary identifier)
+                        userNumber: null,                        // Sequential user number (will be set by admin/cloud function)
+
+                        // === PROFILE INFORMATION ===
+                        profile: {
+                            email: authData.email,               // User's email address
+                            username: username,                  // Unique username
+                            displayName: authData.name || username,  // Display name for UI
+                            photoURL: authData.picture || authData.photoURL || defaultPhotoURL,  // Profile picture URL
+                            bio: '',                             // User bio (empty by default)
+                            emailVerified: authData.emailVerified || false  // Email verification status
+                        },
+
+                        // === AUTHENTICATION INFO ===
+                        authentication: {
+                            method: authMethod,                  // 'google' or 'email'
+                            provider: authData.providerData?.[0]?.providerId || 'password',  // Full provider ID
+                            createdAt: serverTimestamp(),        // Account creation timestamp
+                            lastLogin: serverTimestamp(),        // Last login timestamp
+                            loginCount: 1                        // Number of logins
+                        },
+
+                        // === BILLING & CREDITS ===
+                        billing: {
+                            credits: INITIAL_CREDITS,            // Current credit balance
+                            totalCreditsEarned: INITIAL_CREDITS, // Lifetime credits earned
+                            totalCreditsSpent: 0,                // Lifetime credits spent
+                            subscriptionTier: 'free',            // 'free', 'starter', 'pro', 'studio'
+                            subscriptionStatus: 'active',        // 'active', 'cancelled', 'expired'
+                            nextBillingDate: null                // Next billing date (null for free tier)
+                        },
+
+                        // === USAGE STATISTICS ===
+                        stats: {
+                            totalGenerations: 0,                 // Total AI generations created
+                            backgroundChanges: 0,                // Background changer usage count
+                            videosCreated: 0,                    // Videos created count
+                            voiceovers: 0                        // Voiceovers created count
+                        },
+
+                        // === ACCOUNT STATUS ===
+                        status: {
+                            isActive: true,                      // Account active status
+                            isBanned: false,                     // Ban status
+                            isEmailVerified: authData.emailVerified || false,  // Email verification
+                            accountType: 'user'                  // 'user', 'admin', 'moderator'
+                        },
+
+                        // === TIMESTAMPS (Top-level for easy querying) ===
+                        createdAt: serverTimestamp(),            // Account creation
+                        updatedAt: serverTimestamp(),            // Last profile update
+                        lastLogin: serverTimestamp()             // Last login
+                    };
+
+                    await setDoc(userDocRef, newUserData);
+                    console.log(`✅ User account created successfully!`);
+                    console.log(`   Email: ${authData.email}`);
+                    console.log(`   Username: ${username}`);
+                    console.log(`   Auth Method: ${authMethod}`);
+                    console.log(`   Initial Credits: ${INITIAL_CREDITS}`);
+
+                } else {
+                    // User exists - update login information
+                    const existingData = userDoc.data();
+                    const loginCount = (existingData.authentication?.loginCount || 0) + 1;
 
                     await setDoc(userDocRef, {
-                        email: authData.email,
-                        displayName: authData.name || username,
-                        username: username,
-                        photoURL: authData.picture || authData.photoURL || defaultPhotoURL,
-                        authMethod: authMethod,
-                        credits: INITIAL_CREDITS,
-                        createdAt: serverTimestamp(),
-                        lastLogin: serverTimestamp()
-                    });
-                } else {
-                    // Update last login
-                    await setDoc(userDocRef, {
-                        lastLogin: serverTimestamp()
+                        lastLogin: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                        'authentication.lastLogin': serverTimestamp(),
+                        'authentication.loginCount': loginCount
                     }, { merge: true });
+
+                    console.log(`✅ User logged in - Login count: ${loginCount}`);
                 }
 
                 // Listen to credit changes in real-time
                 const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        setCredits(data.credits ?? INITIAL_CREDITS);
+                        // Support both new nested structure and legacy flat structure
+                        const userCredits = data.billing?.credits ?? data.credits ?? INITIAL_CREDITS;
+                        setCredits(userCredits);
                     }
                 });
 
