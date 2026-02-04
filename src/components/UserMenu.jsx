@@ -25,10 +25,27 @@ const UserMenu = ({ authData }) => {
 
                 if (!userDoc.exists()) {
                     console.log('Creating new user document with initial credits');
+
+                    // Determine auth method (Google or Email/Password)
+                    const authMethod = authData.providerData?.[0]?.providerId === 'google.com' ? 'google' : 'email';
+
+                    // Generate username if using Google (or use displayName if available)
+                    let username = authData.name || authData.displayName;
+                    if (authMethod === 'google' && !username) {
+                        // Generate from email
+                        const baseName = authData.email.split('@')[0];
+                        username = `${baseName}${Math.floor(Math.random() * 9999)}`;
+                    }
+
+                    // Default profile picture if none provided
+                    const defaultPhotoURL = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(username || 'User') + '&background=6366f1&color=fff&size=200';
+
                     await setDoc(userDocRef, {
                         email: authData.email,
-                        displayName: authData.name,
-                        photoURL: authData.picture,
+                        displayName: authData.name || username,
+                        username: username,
+                        photoURL: authData.picture || authData.photoURL || defaultPhotoURL,
+                        authMethod: authMethod,
                         credits: INITIAL_CREDITS,
                         createdAt: serverTimestamp(),
                         lastLogin: serverTimestamp()

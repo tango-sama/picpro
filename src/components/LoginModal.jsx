@@ -1,12 +1,25 @@
 import React, { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
-import { signInWithGoogle } from '../firebase';
+import { X, Loader2, Mail, Lock } from 'lucide-react';
+import { signInWithGoogle, signInWithEmail } from '../firebase';
 
-const LoginModal = ({ isOpen, onClose }) => {
+const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
+    const [authMethod, setAuthMethod] = useState('google'); // 'google' or 'email'
+    const [formData, setFormData] = useState({
+        email: '',
+        password: ''
+    });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     if (!isOpen) return null;
+
+    const handleChange = (e) => {
+        setFormData({
+            ...formData,
+            [e.target.name]: e.target.value
+        });
+        setError(null);
+    };
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -15,6 +28,28 @@ const LoginModal = ({ isOpen, onClose }) => {
         try {
             await signInWithGoogle();
             // Close modal on success - the auth state change will be handled by App.jsx
+            onClose();
+        } catch (error) {
+            console.error('Login error:', error);
+            setError(error.message || 'Failed to sign in. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEmailSignIn = async (e) => {
+        e.preventDefault();
+
+        if (!formData.email || !formData.password) {
+            setError('Please enter both email and password');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            await signInWithEmail(formData.email, formData.password);
             onClose();
         } catch (error) {
             console.error('Login error:', error);
@@ -42,7 +77,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                 className="glass"
                 style={{
                     width: '100%',
-                    maxWidth: '400px',
+                    maxWidth: '420px',
                     padding: '2rem',
                     position: 'relative',
                     animation: 'scaleUp 0.3s ease'
@@ -69,6 +104,51 @@ const LoginModal = ({ isOpen, onClose }) => {
                     <p style={{ color: 'var(--text-muted)' }}>Sign in to continue to PicPro</p>
                 </div>
 
+                {/* Auth Method Tabs */}
+                <div style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    marginBottom: '1.5rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '0.25rem',
+                    borderRadius: '0.5rem'
+                }}>
+                    <button
+                        onClick={() => setAuthMethod('google')}
+                        style={{
+                            flex: 1,
+                            padding: '0.625rem',
+                            background: authMethod === 'google' ? 'var(--accent)' : 'transparent',
+                            color: authMethod === 'google' ? 'white' : 'var(--text-muted)',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        Google
+                    </button>
+                    <button
+                        onClick={() => setAuthMethod('email')}
+                        style={{
+                            flex: 1,
+                            padding: '0.625rem',
+                            background: authMethod === 'email' ? 'var(--accent)' : 'transparent',
+                            color: authMethod === 'email' ? 'white' : 'var(--text-muted)',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        Email
+                    </button>
+                </div>
+
                 {error && (
                     <div style={{
                         background: 'rgba(239, 68, 68, 0.1)',
@@ -83,42 +163,141 @@ const LoginModal = ({ isOpen, onClose }) => {
                     </div>
                 )}
 
-                <button
-                    className="btn"
-                    style={{
-                        width: '100%',
-                        background: 'white',
-                        color: '#1e293b',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.75rem',
-                        marginBottom: '1rem',
-                        height: '3.5rem',
-                        fontSize: '1rem',
-                        position: 'relative'
-                    }}
-                    onClick={handleGoogleSignIn}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <>
-                            <Loader2 className="animate-spin" size={24} />
-                            Signing in...
-                        </>
-                    ) : (
-                        <>
-                            <img
-                                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                                alt="Google"
-                                style={{ width: '24px', height: '24px' }}
-                            />
-                            Continue with Google
-                        </>
-                    )}
-                </button>
+                {/* Google Sign In */}
+                {authMethod === 'google' && (
+                    <button
+                        className="btn"
+                        style={{
+                            width: '100%',
+                            background: 'white',
+                            color: '#1e293b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.75rem',
+                            height: '3.5rem',
+                            fontSize: '1rem'
+                        }}
+                        onClick={handleGoogleSignIn}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <>
+                                <Loader2 className="animate-spin" size={24} />
+                                Signing in...
+                            </>
+                        ) : (
+                            <>
+                                <img
+                                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                                    alt="Google"
+                                    style={{ width: '24px', height: '24px' }}
+                                />
+                                Continue with Google
+                            </>
+                        )}
+                    </button>
+                )}
 
-                <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                {/* Email/Password Sign In */}
+                {authMethod === 'email' && (
+                    <form onSubmit={handleEmailSignIn} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Mail size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                            <input
+                                type="email"
+                                name="email"
+                                placeholder="Email address"
+                                value={formData.email}
+                                onChange={handleChange}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem 0.875rem 3rem',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.5rem',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '1rem',
+                                    outline: 'none',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
+                            />
+                        </div>
+
+                        <div style={{ position: 'relative' }}>
+                            <Lock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                            <input
+                                type="password"
+                                name="password"
+                                placeholder="Password"
+                                value={formData.password}
+                                onChange={handleChange}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem 0.875rem 3rem',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.5rem',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '1rem',
+                                    outline: 'none',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="btn"
+                            style={{
+                                width: '100%',
+                                background: 'linear-gradient(135deg, var(--accent), var(--accent-secondary))',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.75rem',
+                                height: '3rem',
+                                fontSize: '1rem'
+                            }}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <>
+                                    <Loader2 className="animate-spin" size={20} />
+                                    Signing in...
+                                </>
+                            ) : (
+                                'Sign In'
+                            )}
+                        </button>
+                    </form>
+                )}
+
+                <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                        Don't have an account?{' '}
+                        <button
+                            onClick={onSwitchToRegister}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--accent)',
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            Create account
+                        </button>
+                    </p>
+                </div>
+
+                <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
                     By continuing, you agree to our Terms of Service and Privacy Policy.
                 </p>
 

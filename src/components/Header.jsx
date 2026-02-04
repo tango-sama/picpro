@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Image, Video, Mic, ChevronDown, Rocket, X, Menu, Home, Info as InfoIcon, Sparkles } from 'lucide-react';
 import UserMenu from './UserMenu';
+import LoginModal from './LoginModal';
+import RegisterModal from './RegisterModal';
 
 const tools = [
   { id: 'bg-changer', title: 'Background Changer', icon: <Image size={20} />, description: 'AI background removal', path: '/tool/background-changer', infoPath: '/feature/background-changer', color: '#6366f1' },
@@ -15,6 +17,8 @@ const Header = ({ user }) => {
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -60,7 +64,23 @@ const Header = ({ user }) => {
   };
 
   const handleLogin = () => {
-    window.location.href = '/auth/google';
+    setMobileMenuOpen(false);
+    setLoginModalOpen(true);
+  };
+
+  const handleRegister = () => {
+    setMobileMenuOpen(false);
+    setRegisterModalOpen(true);
+  };
+
+  const switchToRegister = () => {
+    setLoginModalOpen(false);
+    setRegisterModalOpen(true);
+  };
+
+  const switchToLogin = () => {
+    setRegisterModalOpen(false);
+    setLoginModalOpen(true);
   };
 
   return (
@@ -277,6 +297,18 @@ const Header = ({ user }) => {
           </div>
         </>
       )}
+
+      {/* Auth Modals */}
+      <LoginModal
+        isOpen={loginModalOpen}
+        onClose={() => setLoginModalOpen(false)}
+        onSwitchToRegister={switchToRegister}
+      />
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
+        onSwitchToLogin={switchToLogin}
+      />
     </>
   );
 };

@@ -1,6 +1,15 @@
 // Firebase configuration
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
+import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut as firebaseSignOut,
+    onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    updateProfile
+} from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
@@ -51,6 +60,71 @@ export const signInWithGoogle = async () => {
         return result.user;
     } catch (error) {
         console.error('❌ Sign-in error:', error);
+        throw error;
+    }
+};
+
+// Helper function to generate a unique username from email
+export const generateUsernameFromEmail = (email) => {
+    const baseName = email.split('@')[0];
+    const randomSuffix = Math.floor(Math.random() * 9999);
+    return `${baseName}${randomSuffix}`;
+};
+
+// Helper function to generate username from Google display name
+export const generateUsernameFromName = (displayName) => {
+    if (!displayName) return `user${Math.floor(Math.random() * 99999)}`;
+    const cleaned = displayName.toLowerCase().replace(/\s+/g, '');
+    const randomSuffix = Math.floor(Math.random() * 999);
+    return `${cleaned}${randomSuffix}`;
+};
+
+// Helper function to register with email and password
+export const registerWithEmail = async (email, password, username) => {
+    try {
+        // Create user account
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Update display name with username
+        await updateProfile(user, {
+            displayName: username
+        });
+
+        console.log('✅ Successfully registered:', user.email);
+        return user;
+    } catch (error) {
+        console.error('❌ Registration error:', error);
+
+        // Provide user-friendly error messages
+        if (error.code === 'auth/email-already-in-use') {
+            throw new Error('This email is already registered. Please sign in instead.');
+        } else if (error.code === 'auth/weak-password') {
+            throw new Error('Password should be at least 6 characters.');
+        } else if (error.code === 'auth/invalid-email') {
+            throw new Error('Invalid email address.');
+        }
+        throw error;
+    }
+};
+
+// Helper function to sign in with email and password
+export const signInWithEmail = async (email, password) => {
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log('✅ Successfully signed in:', userCredential.user.email);
+        return userCredential.user;
+    } catch (error) {
+        console.error('❌ Sign-in error:', error);
+
+        // Provide user-friendly error messages
+        if (error.code === 'auth/user-not-found') {
+            throw new Error('No account found with this email.');
+        } else if (error.code === 'auth/wrong-password') {
+            throw new Error('Incorrect password.');
+        } else if (error.code === 'auth/invalid-email') {
+            throw new Error('Invalid email address.');
+        }
         throw error;
     }
 };
