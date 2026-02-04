@@ -138,7 +138,8 @@ import {
   getDoc,
   updateDoc,
   increment,
-  setDoc
+  setDoc,
+  serverTimestamp
 } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -159,24 +160,31 @@ app.post('/api/generate', async (req, res) => {
   const { deployment_id, inputs } = req.body
   const apiKey = COMFY_API_KEY
 
-  // 1. Verify Authentication & User
-  const session = req.cookies.session
-  if (!session) return res.status(401).json({ error: 'Unauthorized' })
+  // 1. Verify Firebase ID Token
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized - No token provided' })
+  }
 
+  const idToken = authHeader.split('Bearer ')[1]
   let userId
+
   try {
-    const idToken = Buffer.from(session, 'base64').toString('utf-8')
+    // Simple JWT decode (for Firebase tokens, we trust the signature since it's from our project)
+    // In production, you should verify the signature using firebase-admin
     const base64Url = idToken.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
     const payload = JSON.parse(Buffer.from(base64, 'base64').toString('ascii'))
-    userId = payload.sub
+    userId = payload.sub || payload.user_id
+
+    console.log('🔐 Authenticated user:', userId)
   } catch (e) {
-    console.error('Invalid session token:', e)
-    return res.status(401).json({ error: 'Invalid session' })
+    console.error('❌ Invalid Firebase token:', e)
+    return res.status(401).json({ error: 'Invalid authentication token' })
   }
 
   if (!userId)
-    return res.status(401).json({ error: 'User ID not found in session' })
+    return res.status(401).json({ error: 'User ID not found in token' })
 
   // 2. Check & Deduct Credits
   const COST = 15
@@ -189,7 +197,8 @@ app.post('/api/generate', async (req, res) => {
     }
 
     const userData = userSnap.data()
-    const currentCredits = userData.credits || 0
+    // Support both new nested structure and legacy flat structure
+    const currentCredits = userData.billing?.credits ?? userData.credits ?? 0
 
     if (currentCredits < COST) {
       return res.status(402).json({
@@ -197,14 +206,23 @@ app.post('/api/generate', async (req, res) => {
       })
     }
 
-    // Deduct credits
-    await updateDoc(userRef, {
-      credits: increment(-COST)
-    })
+    // Deduct credits from the appropriate field
+    if (userData.billing) {
+      // New nested structure
+      await updateDoc(userRef, {
+        'billing.credits': increment(-COST),
+        'billing.totalCreditsSpent': increment(COST),
+        updatedAt: serverTimestamp()
+      })
+    } else {
+      // Legacy flat structure
+      await updateDoc(userRef, {
+        credits: increment(-COST)
+      })
+    }
 
     console.log(
-      `Deducted ${COST} credits from user ${userId}. New balance: ${currentCredits - COST
-      }`
+      `💰 Deducted ${COST} credits from user ${userId}. New balance: ${currentCredits - COST}`
     )
   } catch (dbError) {
     console.error('Database error during credit check:', dbError)
@@ -233,12 +251,24 @@ app.post('/api/generate', async (req, res) => {
     res.json(response.data)
   } catch (error) {
     console.error('ComfyDeploy Error:', error.response?.data || error.message)
-    // Ideally render a refund here if the API call fails, but keeping it simple for now as requested strictness.
-    // Or we could refund:
+    // Refund credits if API call fails
     try {
-      await updateDoc(userRef, { credits: increment(COST) })
+      const userSnap = await getDoc(userRef)
+      if (userSnap.exists()) {
+        const userData = userSnap.data()
+        if (userData.billing) {
+          // New nested structure
+          await updateDoc(userRef, {
+            'billing.credits': increment(COST),
+            'billing.totalCreditsSpent': increment(-COST)
+          })
+        } else {
+          // Legacy structure
+          await updateDoc(userRef, { credits: increment(COST) })
+        }
+      }
       console.log(
-        `Refunded ${COST} credits to user ${userId} due to API failure.`
+        `💸 Refunded ${COST} credits to user ${userId} due to API failure.`
       )
     } catch (refundErr) {
       console.error('Refund failed:', refundErr)

@@ -541,10 +541,16 @@ const BackgroundChanger = () => {
 
             setStatusText('Triggering AI...');
 
-            // 3. Call backend proxy with Firebase URLs
+            // 3. Get Firebase ID token for backend authentication
+            const idToken = await currentUser.getIdToken();
+
+            // 4. Call backend proxy with Firebase URLs and auth token
             const res = await fetch('/api/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`  // Send Firebase ID token
+                },
                 body: JSON.stringify({
                     deployment_id: "0229e028-c785-4e35-8317-cbde43ccfa01",
                     inputs: {
