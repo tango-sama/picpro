@@ -310,8 +310,12 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
-app.listen(PORT, () => {
-  console.log(`OAuth server listening on http://localhost:${PORT}`)
-})
+// Only start the server if not running in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`OAuth server listening on http://localhost:${PORT}`)
+  })
+}
 
+export default app
 export { app }

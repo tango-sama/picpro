@@ -3,6 +3,8 @@ import { User, Coins } from 'lucide-react';
 import AccountPanel from './AccountPanel';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { getNextUserNumber, formatUserDisplayId } from '../utils/userCounter';
+
 
 const INITIAL_CREDITS = 200;
 
@@ -54,11 +56,16 @@ const UserMenu = ({ authData }) => {
                     // Generate default avatar if no photo provided
                     const defaultPhotoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(username || 'User')}&background=6366f1&color=fff&size=200`;
 
+                    // Get next sequential user number
+                    const userNumber = await getNextUserNumber(db);
+                    const userDisplayId = formatUserDisplayId(userNumber);
+
                     // Create structured user document with clear field organization
                     const newUserData = {
                         // === ACCOUNT IDENTIFIERS ===
                         userId: authData.uid,                    // Firebase UID (primary identifier)
-                        userNumber: null,                        // Sequential user number (will be set by admin/cloud function)
+                        userNumber: userNumber,                  // Sequential user number (e.g., 1, 2, 3...)
+                        userDisplayId: userDisplayId,            // Formatted ID (e.g., USER_0001)
 
                         // === PROFILE INFORMATION ===
                         profile: {
@@ -113,10 +120,12 @@ const UserMenu = ({ authData }) => {
 
                     await setDoc(userDocRef, newUserData);
                     console.log(`✅ User account created successfully!`);
+                    console.log(`   User Number: ${userDisplayId} (#${userNumber})`);
                     console.log(`   Email: ${authData.email}`);
                     console.log(`   Username: ${username}`);
                     console.log(`   Auth Method: ${authMethod}`);
                     console.log(`   Initial Credits: ${INITIAL_CREDITS}`);
+
 
                 } else {
                     // User exists - update login information

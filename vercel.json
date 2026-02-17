@@ -1,0 +1,17 @@
+{
+    "rewrites": [
+        {
+            "source": "/auth/:path*",
+            "destination": "/api/server"
+        },
+        {
+            "source": "/api/:path*",
+            "destination": "/api/server"
+        }
+    ],
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "installCommand": "npm install",
+    "framework": null,
+    "public": false
+}
