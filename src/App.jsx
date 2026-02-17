@@ -12,6 +12,7 @@ import FeatureBackgroundChanger from './components/FeatureBackgroundChanger';
 import FeatureImageToVideo from './components/FeatureImageToVideo';
 import FeatureTextToVoice from './components/FeatureTextToVoice';
 import PricingPage from './components/PricingPage';
+import AdminUsersPage from './components/AdminUsersPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import RefundPolicy from './components/RefundPolicy';
@@ -81,6 +82,7 @@ function AppContent() {
           {/* Protected Tool Routes */}
           <Route path="/tool/background-changer" element={user ? <BackgroundChanger /> : <Navigate to="/feature/background-changer" />} />
           <Route path="/my-creations" element={user ? <MyCreationsPage /> : <Navigate to="/" />} />
+          <Route path="/admin/users" element={user ? <AdminUsersPage /> : <Navigate to="/" />} />
 
           {/* Public Pages */}
           <Route path="/about" element={<AboutPage />} />
